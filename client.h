@@ -32,8 +32,9 @@ public:
     void command_help();
     void command_creator();
     void command_display();
+    int command_register();
     void command_list();
-    void command_terminate();
+    void command_terminate(int connectionId);
     void command_quit();
 
     // Utility functions

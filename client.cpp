@@ -1,7 +1,7 @@
 /*
  * ==========================================================================
  *      
- *      Filename: server.cpp
+ *      Filename: client.cpp
  *
  *      Description: 
  * 
@@ -12,20 +12,20 @@
  * ==========================================================================
  */
 
-#include "server.h"
+#include "client.h"
 
 /*
  * Function:    Constructor
  */
-Server::Server(int port) {
-    printf("Starting server on Port: %d \n", port);
+Client::Client(int port) {
+    printf("Starting client on Port: %d \n", port);
     this->m_nListenPort = port;
 }
 
 /*
  * Function:    Destructor
  */
-Server::~Server() {
+Client::~Client() {
 
 }
 
@@ -35,7 +35,7 @@ Server::~Server() {
  * Returns:     None
  * Description: This functions displays all the commands avaliable to user
  */
-void Server::command_help() {
+void Client::command_help() {
     // Complete this
 }
 
@@ -45,7 +45,7 @@ void Server::command_help() {
  * Returns:     None
  * Description: This functions displays all the name, ubitname and mail address of the creator
  */
-void Server::command_creator() {
+void Client::command_creator() {
     printf("Creator:%s UBITname:%s UBEmail:%s \n",m_name, m_ubitName, m_ubEmail);
 }
 
@@ -55,7 +55,7 @@ void Server::command_creator() {
  * Returns:     None
  * Description: This functions displays all the IP address and the listening port of this process
  */
-void Server::command_display() {
+void Client::command_display() {
     // Complete this
 }
 
@@ -65,7 +65,7 @@ void Server::command_display() {
  * Returns:     1 if successful else 0
  * Description: This functions adds the IP address and listening port of the client, which sent register command, to registered_list.
  */
-int Server::command_register() {
+int Client::command_register() {
     // Complete this and also fill appropriate parameters
 }
 
@@ -77,17 +77,17 @@ int Server::command_register() {
  *              and by other process.
  *              Format: <id>    <HostName>      <IP Address>        <Port Number>
  */
-void Server::command_list() {
+void Client::command_list() {
     // Complete this
 }
 
 /*
- * Function:    Command_terminate(int connectionId)
+ * Function:    Command_terminate(int connectionID)
  * Parameters:  int connectionId
  * Returns:     None
  * Description: This functions will terminate a connection already in registered_list
  */
-void Server::command_terminate(int connectionId) {
+void Client::command_terminate(int connectionID) {
     // Complete this
 }
 
@@ -97,6 +97,6 @@ void Server::command_terminate(int connectionId) {
  * Returns:     None
  * Description: This functions closes all connections and terminates this process
  */
-void Server::command_quit() {
+void Client::command_quit() {
     // Complete this
 }
