@@ -11,15 +11,16 @@
 #include <cstdio>
 #include <iostream>
 #include <cstdlib>
+#include <cstring>
 
 using namespace std;
 
 class Server {
 private:
     // creator constants
-    char *m_name = "Srikanth Reddy Malipatel\0";
-    char *m_ubitName = "smalipat\0";
-    char *m_ubEmail = "smalipat@buffalo.edu\0";
+    char* m_name;
+    char* m_ubitName;
+    char* m_ubEmail;
 
     // server utilites
     int m_nListenPort;
