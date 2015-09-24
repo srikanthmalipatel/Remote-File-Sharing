@@ -12,15 +12,18 @@
 #include <iostream>
 #include <cstdlib>
 #include <cstring>
+#include "common.h"
 
 using namespace std;
+
+#define MAX_CREATOR_LEN 100
 
 class Client {
 private:
     // creator constants
     char* m_name;
-    char* m_ubitName[];
-    char* m_ubEmail[];
+    char* m_ubitName;
+    char* m_ubEmail;
 
     // client utilites
     int m_nListenPort;
@@ -28,6 +31,9 @@ public:
     // constructor and destructor
     Client(int port);
     ~Client();
+    
+    // eventHandler
+    void commandShell();
 
     // These are possible commands supported by server
     void command_help();
@@ -40,6 +46,9 @@ public:
 
     // Utility functions
     int getListenPort();
+
+private:
+    CommandID getCommandID(char comnd[]);
 };
 
 #endif /* !CLIENT_H */

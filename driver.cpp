@@ -23,10 +23,27 @@ void printUsage(int argc, char* argv[]) {
 }
 
 int main(int argc, char* argv[]) {
+    int port = atoi(argv[2]);;
+
     // check the parameters passed to this program
-    if(argc != 3 || (strcmp("s", argv[1]) != 0) || (strcmp("c", argv[1]) != 0)) {
+    if(argc != 3) {
         printUsage(argc, argv);
-        return 0;
+        return -1;
+    }
+    // check if it client or server
+    if(strcmp("s", argv[1]) == 0 && port > 1024) {
+        // server initalization
+        Server lServer(port);
+        lServer.commandShell();
+    }
+    else if(strcmp("c", argv[1]) == 0 && port > 1024) {
+        // execute client code
+        Client lClient(port);
+        lClient.commandShell();
+    }
+    else {
+        printUsage(argc, argv);
+        return -1;
     }
     // also do a valid port number check
     // check the program type and based on it initalize corresponding objects

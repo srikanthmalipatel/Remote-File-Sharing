@@ -30,6 +30,51 @@ Server::~Server() {
 }
 
 /*
+ * Function:    getCommandID(char[] comnd)
+ * Parameters:  comnd: command to be executed
+ * Returns:     if string is found then returns ComandID else -1
+ * Description: This functions takes a string and returns appropriate CommandID
+ */
+CommandID Server::getCommandID(char comnd[]) {
+    if(strcmp(comnd, "HELP") == 0)
+        return COMMAND_HELP;
+    else if(strcmp(comnd, "CREATOR") == 0)
+        return COMMAND_CREATOR;
+    else if(strcmp(comnd, "DISPLAY") == 0)
+        return COMMAND_DISPLAY;
+    else
+        return COMMAND_NONE;
+}
+
+/*
+ * Function:    commandHandler()
+ * Parameters:  None
+ * Returns:     None
+ * Description: This functions behaves like shell answering all user commands
+ */
+void Server::commandShell() {
+    while(1) {
+        char command[20];
+        scanf("%s", command);
+        CommandID command_id = getCommandID(command); 
+        switch(command_id) {
+            case COMMAND_HELP:
+                // handle help command
+                command_help();
+                break;
+            case COMMAND_CREATOR:
+                // handle CREATOR command
+                command_creator();
+                break;
+            case COMMAND_DISPLAY:
+                // hadle DISPLAY command
+                command_display();
+                break;
+        }
+    }
+}
+
+/*
  * Function:    Command_help()
  * Parameters:  None
  * Returns:     None
@@ -46,7 +91,13 @@ void Server::command_help() {
  * Description: This functions displays all the name, ubitname and mail address of the creator
  */
 void Server::command_creator() {
-    printf("Creator:%s UBITname:%s UBEmail:%s \n",m_name, m_ubitName, m_ubEmail);
+    m_name = (char* ) malloc(sizeof(MAX_CREATOR_LEN));
+    m_ubitName = (char* ) malloc(sizeof(MAX_CREATOR_LEN));
+    m_ubEmail = (char* ) malloc(sizeof(MAX_CREATOR_LEN));
+    strcpy(m_name, "Srikanth Reddy Malipatel\0");
+    strcpy(m_ubitName, "smalipat\0");
+    strcpy(m_ubEmail, "smalipat@buffalo.edu\0");
+    printf("Name:%s UBITname:%s UBEmail:%s \n",m_name, m_ubitName, m_ubEmail);
 }
 
 /*

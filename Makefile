@@ -19,7 +19,7 @@ client.o: client.cpp
 	g++ -g -c client.cpp
 
 clean:
-	rm *.o hello
+	rm *.o napster
 
 # vim:ft=make
 #

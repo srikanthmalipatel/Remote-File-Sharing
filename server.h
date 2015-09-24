@@ -12,8 +12,10 @@
 #include <iostream>
 #include <cstdlib>
 #include <cstring>
+#include "common.h"
 
 using namespace std;
+
 
 class Server {
 private:
@@ -29,6 +31,9 @@ public:
     Server(int port);
     ~Server();
 
+    // Event handler
+    void commandShell();
+
     // These are possible commands supported by server
     void command_help();
     void command_creator();
@@ -40,6 +45,10 @@ public:
 
     // Utility functions
     int getListenPort();
+
+private:
+    // Utility functions
+    CommandID getCommandID(char comnd[]);
 };
 
 #endif /* !SERVER_H */
