@@ -10,7 +10,7 @@
 
 // This contains all common definitions for client and server
 
-#define MAX_CREATOR_LEN 200
+#define MAX_CREATOR_LEN 100
 
 // all possible commands. update this when adding a new command
 typedef enum {

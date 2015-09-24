@@ -91,13 +91,13 @@ void Client::command_help() {
  * Description: This functions displays all the name, ubitname and mail address of the creator
  */
 void Client::command_creator() {
-    m_name = (char* ) malloc(sizeof(MAX_CREATOR_LEN));
-    m_ubitName = (char* ) malloc(sizeof(MAX_CREATOR_LEN));
-    m_ubEmail = (char* ) malloc(sizeof(MAX_CREATOR_LEN));
+    m_name = (char* ) malloc(MAX_CREATOR_LEN);
+    m_ubitName = (char* ) malloc(MAX_CREATOR_LEN);
+    m_ubEmail = (char* ) malloc(MAX_CREATOR_LEN);
     strcpy(m_name, "Srikanth Reddy Malipatel\0");
     strcpy(m_ubitName, "smalipat\0");
     strcpy(m_ubEmail, "srmalipat@buffalo.edu\0");
-    printf("Creator:%s UBITname:%s UBEmail:%s \n",m_name, m_ubitName, m_ubEmail);
+    printf("Creator:%s\tUBITname:%s\tUBEmail:%s \n",m_name, m_ubitName, m_ubEmail);
 }
 
 /*
