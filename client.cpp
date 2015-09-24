@@ -36,11 +36,11 @@ Client::~Client() {
  * Description: This functions takes a string and returns appropriate CommandID
  */
 CommandID Client::getCommandID(char comnd[]) {
-    if(strcmp(comnd, "HELP") == 0)
+    if(strcasecmp(comnd, "HELP") == 0)
         return COMMAND_HELP;
-    else if(strcmp(comnd, "CREATOR") == 0)
+    else if(strcasecmp(comnd, "CREATOR") == 0)
         return COMMAND_CREATOR;
-    else if(strcmp(comnd, "DISPLAY") == 0)
+    else if(strcasecmp(comnd, "DISPLAY") == 0)
         return COMMAND_DISPLAY;
     else
         return COMMAND_NONE;
@@ -81,7 +81,10 @@ void Client::commandShell() {
  * Description: This functions displays all the commands avaliable to user
  */
 void Client::command_help() {
-    // Complete this
+    printf("User command options \n");
+    printf("\tCREATOR - Displays creators full name, UBIT name and UB email address\n");
+    printf("\tDIPSLAY - Displays the IP address and listening port of this process\n");
+    
 }
 
 /*

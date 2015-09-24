@@ -10,6 +10,7 @@
 
 // This contains all common definitions for client and server
 
+// macros for constants
 #define MAX_CREATOR_LEN 100
 
 // all possible commands. update this when adding a new command

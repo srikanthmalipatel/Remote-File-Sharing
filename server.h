@@ -11,7 +11,7 @@
 #include <cstdio>
 #include <iostream>
 #include <cstdlib>
-#include <cstring>
+#include <string.h>
 #include "common.h"
 
 using namespace std;
