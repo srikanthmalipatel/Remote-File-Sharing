@@ -11,7 +11,13 @@
 #include <cstdio>
 #include <iostream>
 #include <cstdlib>
-#include <string.h>
+#include <cstring>
+// if you want to move common functionality to a parent class then move these headers also
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <sys/types.h>
+#include <ifaddrs.h>
+#include <netdb.h>
 #include "common.h"
 
 using namespace std;
@@ -26,6 +32,8 @@ private:
 
     // server utilites
     int m_nListenPort;
+    char m_ipAddress[INET_ADDRSTRLEN];
+
 public:
     // constructor and destructor
     Server(int port);
@@ -49,6 +57,7 @@ public:
 private:
     // Utility functions
     CommandID getCommandID(char comnd[]);
+    void updateIpAddress();
 };
 
 #endif /* !SERVER_H */

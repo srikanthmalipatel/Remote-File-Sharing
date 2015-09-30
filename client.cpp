@@ -20,6 +20,7 @@
 Client::Client(int port) {
     printf("Starting client on Port: %d \n", port);
     this->m_nListenPort = port;
+    updateIpAddress();
 }
 
 /*
@@ -42,6 +43,8 @@ CommandID Client::getCommandID(char comnd[]) {
         return COMMAND_CREATOR;
     else if(strcasecmp(comnd, "DISPLAY") == 0)
         return COMMAND_DISPLAY;
+    else if(strcasecmp(comnd, "LIST") == 0)
+        return COMMAND_LIST;
     else
         return COMMAND_NONE;
 }
@@ -70,6 +73,13 @@ void Client::commandShell() {
                 // hadle DISPLAY command
                 command_display();
                 break;
+            case COMMAND_LIST:
+                command_list();
+                break;
+            default:
+                printf("Please enter a valid command \n");
+                printf("Type Help - to display supported commands \n");
+                break;
         }
     }
 }
@@ -84,7 +94,7 @@ void Client::command_help() {
     printf("User command options \n");
     printf("\tCREATOR - Displays creators full name, UBIT name and UB email address\n");
     printf("\tDIPSLAY - Displays the IP address and listening port of this process\n");
-    
+    printf("\tLIST - Displays a list of clients registered on this server\n");
 }
 
 /*
@@ -110,7 +120,7 @@ void Client::command_creator() {
  * Description: This functions displays all the IP address and the listening port of this process
  */
 void Client::command_display() {
-    // Complete this
+    printf("Machine's IP Address is: %s and Listening port of server is: %d \n", m_ipAddress, m_nListenPort);
 }
 
 /*
@@ -153,4 +163,36 @@ void Client::command_terminate(int connectionID) {
  */
 void Client::command_quit() {
     // Complete this
+}
+
+/*****************************************************************************
+ *                      Server utility functions                             *
+ * **************************************************************************/
+
+/*
+ * Function:    updateIpAddress()
+ * Parameters:  None
+ * Returns:     None
+ * Description: This function updates m_ipAddress buffer with the public interface ip
+ */
+void Client::updateIpAddress() {
+    struct ifaddrs *ifAddr;
+    char host[INET_ADDRSTRLEN];
+
+    // ifAddr contains a list of all local interfaces
+    getifaddrs(&ifAddr);
+    while(ifAddr != NULL) {
+        // ignore the nodes which do not contain struct sockaddr
+        if(ifAddr->ifa_addr == NULL)
+            continue;
+        // We need to consider only ipv4 address
+        if(ifAddr->ifa_addr->sa_family == AF_INET) {
+            // get the ip address of this interface and update if it is not a local or private ip address
+            getnameinfo(ifAddr->ifa_addr, sizeof(struct sockaddr_in), host, INET_ADDRSTRLEN, NULL, 0, NI_NUMERICHOST);
+            if(strcmp(host,"127.0.0.1") != 0 && strstr(host, "192.168") == NULL) 
+                strcpy(m_ipAddress, host);
+        }
+        ifAddr = ifAddr->ifa_next;
+    }
+    return;
 }

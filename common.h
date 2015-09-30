@@ -21,5 +21,5 @@ typedef enum {
     COMMAND_LIST,
     COMMAND_NONE=-1,
 }CommandID;
- 
+
 #endif /* !COMMON_H */

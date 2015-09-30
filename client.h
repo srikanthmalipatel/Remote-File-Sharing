@@ -12,6 +12,12 @@
 #include <iostream>
 #include <cstdlib>
 #include <cstring>
+// if common functionality is moved to different file then move these headers also
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <sys/types.h>
+#include <ifaddrs.h>
+#include <netdb.h>
 #include "common.h"
 
 using namespace std;
@@ -27,6 +33,7 @@ private:
 
     // client utilites
     int m_nListenPort;
+    char m_ipAddress[INET_ADDRSTRLEN];
 public:
     // constructor and destructor
     Client(int port);
@@ -49,6 +56,7 @@ public:
 
 private:
     CommandID getCommandID(char comnd[]);
+    void updateIpAddress();
 };
 
 #endif /* !CLIENT_H */
