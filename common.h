@@ -18,6 +18,7 @@ typedef enum {
     COMMAND_HELP=1,
     COMMAND_CREATOR,
     COMMAND_DISPLAY,
+    COMMAND_LIST,
     COMMAND_NONE=-1,
 }CommandID;
  

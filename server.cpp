@@ -42,6 +42,8 @@ CommandID Server::getCommandID(char comnd[]) {
         return COMMAND_CREATOR;
     else if(strcasecmp(comnd, "DISPLAY") == 0)
         return COMMAND_DISPLAY;
+    else if(strcasecmp(comnd, "LIST") == 0)
+        return COMMAND_LIST;
     else
         return COMMAND_NONE;
 }
@@ -67,8 +69,16 @@ void Server::commandShell() {
                 command_creator();
                 break;
             case COMMAND_DISPLAY:
-                // hadle DISPLAY command
+                // handle DISPLAY command
                 command_display();
+                break;
+            case COMMAND_LIST:
+                // handle LIST command
+                command_list();
+                break;
+            default:
+                printf("Please enter a valid command \n");
+                printf("Type Help - to display supported commands \n");
                 break;
         }
     }
@@ -84,7 +94,7 @@ void Server::command_help() {
     printf("User command options \n");
     printf("\tCREATOR - Displays creators full name, UBIT name and UB email address\n");
     printf("\tDIPSLAY - Displays the IP address and listening port of this process\n");
-    
+    printf("\tLIST - Displays a list of clients registered on this server\n");
     printf("\n");
 }
 
