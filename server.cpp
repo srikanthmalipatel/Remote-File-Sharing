@@ -18,9 +18,16 @@
  * Function:    Constructor
  */
 Server::Server(int port) {
-    printf("Starting server on Port: %d \n", port);
     this->m_nListenPort = port;
     updateIpAddress();
+
+    // initalize server specific parameters
+    FD_ZERO(&m_masterSet);
+    FD_ZERO(&m_readSet);
+    memset(&m_srvAddr, 0, sizeof(m_srvAddr));
+
+    // starting event handler
+    eventHandler();
 }
 
 /*
@@ -28,6 +35,75 @@ Server::Server(int port) {
  */
 Server::~Server() {
 
+}
+
+void Server::eventHandler() {
+    char buffer[1024];
+    // add stdin to master set
+    FD_SET(STDIN, &m_masterSet);
+
+    // populate server address structure
+    m_srvAddr.sin_family = AF_INET;
+    m_srvAddr.sin_port = htons(m_nListenPort);
+    if(inet_pton(AF_INET, m_ipAddress, &m_srvAddr.sin_addr) != 1) {
+        perror("inet_pton failure");
+        exit(EXIT_FAILURE);
+    }
+    // create a TCP listening socket
+    if((m_nListenSd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        perror("Listening socket creation failed");
+        exit(EXIT_FAILURE);
+    }
+    // reuse the socket in case of crash
+    int optval = 1;
+    if(setsockopt(m_nListenSd, SOL_SOCKET, SO_REUSEADDR, (char *)&optval, sizeof(optval)) < 0) {
+        perror("setsockopt failed");
+        exit(EXIT_FAILURE);
+    }
+    // bind m_srvAddr to the listening socket
+    if(bind(m_nListenSd, (struct sockaddr *)&m_srvAddr, sizeof(m_srvAddr)) < 0) {
+        perror("bind failed");
+        exit(EXIT_FAILURE);
+    }
+    printf("Server Started listening on port: %d \n", m_nListenPort);
+    // maximum of 5 pending connections for m_nListenSd socket
+    if(listen(m_nListenSd, 5)) {
+        perror("Listen failed");
+        exit(EXIT_FAILURE);
+    }
+    // add listening socket to master set and update m_nMaxFd
+    FD_SET(m_nListenSd, &m_masterSet);
+    m_nMaxFd = m_nListenSd;
+    
+    for(;;) {
+        // copy master set to read set
+        m_readSet = m_masterSet;
+        // start polling on read set, which is blocking indefinitely
+        if(select(m_nMaxFd+1, &m_readSet, NULL, NULL, NULL) == -1) {
+            perror("select");
+            exit(EXIT_FAILURE);
+        }
+        // check if there is data on any of the sockets
+        int bytesRead;
+        for(int i=0; i<=m_nMaxFd; i++) {
+            if(FD_ISSET(i, &m_readSet)) {
+                if(i == STDIN) {
+                    printf("data in stdin \n");
+                    // data from stdin, process approriate commands
+                    fgets(buffer, sizeof(buffer), stdin);
+                    buffer[strlen(buffer)-1] = '\0';
+                    commandShell(buffer);
+                }
+                else if(i == m_nListenSd) {
+                    // new connection
+                }
+                else {
+                    // handle data from existing client
+                }
+
+            }
+        }
+    }
 }
 
 /*
@@ -55,34 +131,31 @@ CommandID Server::getCommandID(char comnd[]) {
  * Returns:     None
  * Description: This functions behaves like shell answering all user commands
  */
-void Server::commandShell() {
-    while(1) {
-        char command[20];
-        scanf("%s", command);
-        CommandID command_id = getCommandID(command); 
-        switch(command_id) {
-            case COMMAND_HELP:
-                // handle help command
-                command_help();
-                break;
-            case COMMAND_CREATOR:
-                // handle CREATOR command
-                command_creator();
-                break;
-            case COMMAND_DISPLAY:
-                // handle DISPLAY command
-                command_display();
-                break;
-            case COMMAND_LIST:
-                // handle LIST command
-                command_list();
-                break;
-            default:
-                printf("Please enter a valid command \n");
-                printf("Type Help - to display supported commands \n");
-                break;
+void Server::commandShell(char *command) {
+    printf("command: %s \n", command);
+    CommandID command_id = getCommandID(command); 
+    switch(command_id) {
+        case COMMAND_HELP:
+            // handle help command
+            command_help();
+            break;
+        case COMMAND_CREATOR:
+            // handle CREATOR command
+            command_creator();
+            break;
+        case COMMAND_DISPLAY:
+            // handle DISPLAY command
+            command_display();
+            break;
+        case COMMAND_LIST:
+            // handle LIST command
+            command_list();
+            break;
+        default:
+            printf("Please enter a valid command \n");
+            printf("Type Help - to display supported commands \n");
+            break;
         }
-    }
 }
 
 /*
@@ -180,6 +253,7 @@ void Server::updateIpAddress() {
     struct ifaddrs *ifAddr;
     char host[INET_ADDRSTRLEN];
 
+    printf("updating ip address \n");
     // ifAddr contains a list of all local interfaces
     getifaddrs(&ifAddr);
     while(ifAddr != NULL) {
@@ -190,7 +264,7 @@ void Server::updateIpAddress() {
         if(ifAddr->ifa_addr->sa_family == AF_INET) {
             // get the ip address of this interface and update if it is not a local or private ip address
             getnameinfo(ifAddr->ifa_addr, sizeof(struct sockaddr_in), host, INET_ADDRSTRLEN, NULL, 0, NI_NUMERICHOST);
-            if(strcmp(host,"127.0.0.1") != 0 && strstr(host, "192.168") == NULL) 
+            if(strcmp(host,"127.0.0.1") != 0) 
                 strcpy(m_ipAddress, host);
         }
         ifAddr = ifAddr->ifa_next;

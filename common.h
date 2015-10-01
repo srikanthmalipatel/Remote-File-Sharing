@@ -12,6 +12,7 @@
 
 // macros for constants
 #define MAX_CREATOR_LEN 100
+#define STDIN 0
 
 // all possible commands. update this when adding a new command
 typedef enum {

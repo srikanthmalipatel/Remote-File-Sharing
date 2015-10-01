@@ -18,6 +18,9 @@
 #include <sys/types.h>
 #include <ifaddrs.h>
 #include <netdb.h>
+// above headers required for updateIpAddress() function
+#include <sys/socket.h>
+#include <unistd.h>
 #include "common.h"
 
 using namespace std;
@@ -30,17 +33,28 @@ private:
     char* m_ubitName;
     char* m_ubEmail;
 
-    // server utilites
+    // server details
     int m_nListenPort;
     char m_ipAddress[INET_ADDRSTRLEN];
+
+    // socket specific members
+    int m_nListenSd;        // listen socket descriptor
+    int m_nMaxFd;           // Maximum file descriptor number
+    fd_set m_masterSet;    // list which holds all the active connections including listening socket and stdin
+    fd_set m_readSet;      // list which is a copy of m_nMasterSet and is passed to select() call, since select() call changes the list we don't intend to change m_nMasterSet
+    struct sockaddr_in m_srvAddr; // this holds the server address, port and family and this is bind() to listening socket
 
 public:
     // constructor and destructor
     Server(int port);
     ~Server();
 
-    // Event handler
-    void commandShell();
+    // Utility functions
+    int getListenPort();
+private:
+    // Event handlers for incoming connections and command handlers
+    void eventHandler();
+    void commandShell(char *command);
 
     // These are possible commands supported by server
     void command_help();
@@ -51,10 +65,6 @@ public:
     void command_terminate(int connectionId);
     void command_quit();
 
-    // Utility functions
-    int getListenPort();
-
-private:
     // Utility functions
     CommandID getCommandID(char comnd[]);
     void updateIpAddress();
