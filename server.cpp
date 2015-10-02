@@ -112,7 +112,7 @@ void Server::eventHandler() {
 						perror("accept");
 						exit(EXIT_FAILURE);
 					}
-					printf("new connection from %s on ""socket %d\n", inet_ntop(remoteaddr.sin_family, (struct sockaddr*)&remoteaddr, remoteIP, INET6_ADDRSTRLEN), newConnSd);
+					printf("new connection from %s on ""socket %d\n", inet_ntop(AF_INET, &remoteaddr.sin_addr, remoteIP, INET_ADDRSTRLEN), newConnSd);
                 	FD_SET(newConnSd, &m_masterSet);
 					if (newConnSd > m_nMaxFd) {
 						m_nMaxFd = newConnSd;
