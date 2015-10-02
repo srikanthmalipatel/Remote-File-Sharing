@@ -18,6 +18,7 @@
 #include <sys/types.h>
 #include <ifaddrs.h>
 #include <netdb.h>
+#include <unistd.h>
 #include "common.h"
 
 using namespace std;
@@ -34,6 +35,11 @@ private:
     // client utilites
     int m_nListenPort;
     char m_ipAddress[INET_ADDRSTRLEN];
+    char m_srvIpAddress[INET_ADDRSTRLEN];
+
+    // register
+    bool m_bisRegistered;
+
 public:
     // constructor and destructor
     Client(int port);
@@ -46,7 +52,7 @@ public:
     void command_help();
     void command_creator();
     void command_display();
-    int command_register();
+    int command_register(char *ipAddr, char *port);
     void command_list();
     void command_terminate(int connectionId);
     void command_quit();
@@ -55,8 +61,11 @@ public:
     int getListenPort();
 
 private:
-    CommandID getCommandID(char comnd[]);
+    char** getAndParseCommandLine(int &nArgs);
+    CommandID getCommandID(char *comnd);
     void updateIpAddress();
+    void displayUsage();
+    bool checkValipIPPort();
 };
 
 #endif /* !CLIENT_H */

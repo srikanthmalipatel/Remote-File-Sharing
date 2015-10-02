@@ -20,6 +20,7 @@
 Client::Client(int port) {
     printf("Starting client on Port: %d \n", port);
     this->m_nListenPort = port;
+    this->m_bisRegistered = false;
     updateIpAddress();
 }
 
@@ -31,25 +32,6 @@ Client::~Client() {
 }
 
 /*
- * Function:    getCommandID(char[] comnd)
- * Parameters:  comnd: command to be executed
- * Returns:     if string is found then returns ComandID else -1
- * Description: This functions takes a string and returns appropriate CommandID
- */
-CommandID Client::getCommandID(char comnd[]) {
-    if(strcasecmp(comnd, "HELP") == 0)
-        return COMMAND_HELP;
-    else if(strcasecmp(comnd, "CREATOR") == 0)
-        return COMMAND_CREATOR;
-    else if(strcasecmp(comnd, "DISPLAY") == 0)
-        return COMMAND_DISPLAY;
-    else if(strcasecmp(comnd, "LIST") == 0)
-        return COMMAND_LIST;
-    else
-        return COMMAND_NONE;
-}
-
-/*
  * Function:    commandHandler()
  * Parameters:  None
  * Returns:     None
@@ -57,9 +39,12 @@ CommandID Client::getCommandID(char comnd[]) {
  */
 void Client::commandShell() {
     while(1) {
-        char command[20];
-        scanf("%s", command);
-        CommandID command_id = getCommandID(command); 
+    	int nArgs;
+    	char **commandTokens = getAndParseCommandLine(nArgs);
+        if(nArgs == 0)
+        	continue;
+        //printf("command[0] %s \n", m_commandTokens[0]);
+        CommandID command_id = getCommandID(commandTokens[0]);
         switch(command_id) {
             case COMMAND_HELP:
                 // handle help command
@@ -70,17 +55,25 @@ void Client::commandShell() {
                 command_creator();
                 break;
             case COMMAND_DISPLAY:
-                // hadle DISPLAY command
+                // handle DISPLAY command
                 command_display();
                 break;
             case COMMAND_LIST:
                 command_list();
                 break;
+            case COMMAND_REGISTER:
+            	// if the server is not yet registered and if the number of arguments is same as expected.
+            	if(!m_bisRegistered && nArgs == 3)
+            		command_register(commandTokens[1], commandTokens[2]);
+            	else
+            		displayUsage();
+            	break;
             default:
-                printf("Please enter a valid command \n");
-                printf("Type Help - to display supported commands \n");
+            	displayUsage();
                 break;
         }
+        for(int i=0; i<nArgs; i++)
+        	free(commandTokens[i]);
     }
 }
 
@@ -95,6 +88,7 @@ void Client::command_help() {
     printf("\tCREATOR - Displays creators full name, UBIT name and UB email address\n");
     printf("\tDIPSLAY - Displays the IP address and listening port of this process\n");
     printf("\tLIST - Displays a list of clients registered on this server\n");
+    printf("\tREGISTER <server IP> <Port> - Registers with the server\n");
 }
 
 /*
@@ -127,10 +121,44 @@ void Client::command_display() {
  * Function:    Command_Register()
  * Parameters:  IP address of the client and Listening port number
  * Returns:     1 if successful else 0
- * Description: This functions adds the IP address and listening port of the client, which sent register command, to registered_list.
+ * Description: If the client is not yet registered to the server then this function establishes a TCP connection with the server
  */
-int Client::command_register() {
-    // Complete this and also fill appropriate parameters
+int Client::command_register(char *ipAddr, char *port) {
+	struct sockaddr_in srvAddr;
+	int srvPort = atoi(port);
+	strcpy(m_srvIpAddress, ipAddr);
+	int sockfd;
+
+	// populate server address structure and also check if it is a valid ip address
+	memset(&srvAddr, 0, sizeof(srvAddr));
+	srvAddr.sin_family = AF_INET;
+	srvAddr.sin_port = htons(srvPort);
+	if(inet_pton(AF_INET, m_srvIpAddress, &srvAddr.sin_addr) != 1) {
+		perror("[command_register] inet_pton");
+		displayUsage();
+	}
+
+	if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+	{
+		perror("socket");
+		exit(EXIT_FAILURE);
+	}
+
+	if( connect(sockfd, (struct sockaddr *)&srvAddr, sizeof(srvAddr)) < 0)
+	{
+		perror("connect");
+		exit(EXIT_FAILURE);
+	}
+	m_bisRegistered = true;
+	char recvBuff[1024];
+	int nbytes;
+	if( (nbytes = recv(sockfd, recvBuff, sizeof(recvBuff), 0)) > 0)
+	{
+		recvBuff[nbytes] = 0;
+		printf("%s", recvBuff);
+	}
+
+	return 0;
 }
 
 /*
@@ -169,6 +197,49 @@ void Client::command_quit() {
  *                      Server utility functions                             *
  * **************************************************************************/
 
+char** Client::getAndParseCommandLine(int &nArgs) {
+	// read the command from stdin
+	char *commandLine = NULL;
+	size_t size;
+	ssize_t linelen;
+	linelen = getline(&commandLine, &size, stdin);
+	commandLine[linelen-1] = '\0';
+
+	char **tokens = (char **) malloc(4*sizeof(char *));
+	char *tok = strtok(commandLine, " \0");
+	nArgs = 0;
+	while(tok!=NULL && nArgs < 4) {
+		//printf("tok %s \n", tok);
+		tokens[nArgs] = (char *) malloc(sizeof(strlen(tok)*sizeof(char)));
+		strcpy(tokens[nArgs], tok);
+		//printf("tokens[%d] = %s \n", nArgs, tokens[nArgs]);
+		tok = strtok(NULL, " \0");
+		nArgs++;
+	}
+	return tokens;
+}
+
+/*
+ * Function:    getCommandID(char[] comnd)
+ * Parameters:  comnd: command to be executed
+ * Returns:     if string is found then returns ComandID else -1
+ * Description: This functions takes a string and returns appropriate CommandID
+ */
+CommandID Client::getCommandID(char comnd[]) {
+    if(strcasecmp(comnd, "HELP") == 0)
+        return COMMAND_HELP;
+    else if(strcasecmp(comnd, "CREATOR") == 0)
+        return COMMAND_CREATOR;
+    else if(strcasecmp(comnd, "DISPLAY") == 0)
+        return COMMAND_DISPLAY;
+    else if(strcasecmp(comnd, "LIST") == 0)
+        return COMMAND_LIST;
+    else if(strcasecmp(comnd, "REGISTER") == 0)
+    	return COMMAND_REGISTER;
+    else
+        return COMMAND_NONE;
+}
+
 /*
  * Function:    updateIpAddress()
  * Parameters:  None
@@ -195,4 +266,9 @@ void Client::updateIpAddress() {
         ifAddr = ifAddr->ifa_next;
     }
     return;
+}
+
+void Client::displayUsage() {
+	printf("Please enter a valid command \n");
+	printf("Type Help - to display supported commands \n");
 }

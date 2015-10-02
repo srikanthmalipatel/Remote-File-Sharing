@@ -23,7 +23,7 @@ void printUsage(int argc, char* argv[]) {
 }
 
 int main(int argc, char* argv[]) {
-    int port = atoi(argv[2]);;
+    int port = atoi(argv[2]);
 
     // check the parameters passed to this program
     if(argc != 3) {
@@ -38,6 +38,7 @@ int main(int argc, char* argv[]) {
     else if(strcmp("c", argv[1]) == 0 && port > 1024) {
         // execute client code
         Client lClient(port);
+        lClient.commandShell();
     }
     else {
         printUsage(argc, argv);

@@ -37,6 +37,12 @@ Server::~Server() {
 
 }
 
+/*
+ * Function:    eventHandler()
+ * Parameters:  None
+ * Returns:     None
+ * Description: This function creates a listening socket and accepts new incoming connections, apart from it it also reads from stdin such that server works as a unix shell and also handles incoming connections
+ */
 void Server::eventHandler() {
     char buffer[1024];
     // add stdin to master set
@@ -88,14 +94,36 @@ void Server::eventHandler() {
         for(int i=0; i<=m_nMaxFd; i++) {
             if(FD_ISSET(i, &m_readSet)) {
                 if(i == STDIN) {
-                    printf("data in stdin \n");
                     // data from stdin, process approriate commands
                     fgets(buffer, sizeof(buffer), stdin);
                     buffer[strlen(buffer)-1] = '\0';
-                    commandShell(buffer);
+                    if(strlen(buffer) != 0)
+                    	commandShell(buffer);
                 }
                 else if(i == m_nListenSd) {
                     // new connection
+                	int newConnSd;
+                	char remoteIP[INET_ADDRSTRLEN];
+                	struct sockaddr_in remoteaddr;
+                	remoteaddr.sin_family = AF_INET;
+                	memset(&remoteaddr, 0, sizeof(remoteaddr));
+                	int addrlen = sizeof(remoteaddr);
+					if((newConnSd = accept(m_nListenSd, (struct sockaddr*)&remoteaddr, (socklen_t*)&addrlen)) == -1) {
+						perror("accept");
+						exit(EXIT_FAILURE);
+					}
+					printf("new connection from %s on ""socket %d\n", inet_ntop(remoteaddr.sin_family, (struct sockaddr*)&remoteaddr, remoteIP, INET6_ADDRSTRLEN), newConnSd);
+
+                	FD_SET(newConnSd, &m_masterSet);
+					if (newConnSd > m_nMaxFd) {
+						m_nMaxFd = newConnSd;
+					}
+                	char sendBuff[1024];
+                	snprintf(sendBuff, sizeof(sendBuff), "connection successful\r\n");
+                	if( send(newConnSd, sendBuff, strlen(sendBuff), 0) != strlen(sendBuff) )
+					{
+						perror("send");
+					}
                 }
                 else {
                     // handle data from existing client
@@ -107,26 +135,7 @@ void Server::eventHandler() {
 }
 
 /*
- * Function:    getCommandID(char[] comnd)
- * Parameters:  comnd: command to be executed
- * Returns:     if string is found then returns ComandID else -1
- * Description: This functions takes a string and returns appropriate CommandID
- */
-CommandID Server::getCommandID(char comnd[]) {
-    if(strcasecmp(comnd, "HELP") == 0)
-        return COMMAND_HELP;
-    else if(strcasecmp(comnd, "CREATOR") == 0)
-        return COMMAND_CREATOR;
-    else if(strcasecmp(comnd, "DISPLAY") == 0)
-        return COMMAND_DISPLAY;
-    else if(strcasecmp(comnd, "LIST") == 0)
-        return COMMAND_LIST;
-    else
-        return COMMAND_NONE;
-}
-
-/*
- * Function:    commandHandler()
+ * Function:    commandShell(char *command)
  * Parameters:  None
  * Returns:     None
  * Description: This functions behaves like shell answering all user commands
@@ -244,6 +253,25 @@ void Server::command_quit() {
  * **************************************************************************/
 
 /*
+ * Function:    getCommandID(char[] comnd)
+ * Parameters:  comnd: command to be executed
+ * Returns:     if string is found then returns ComandID else -1
+ * Description: This functions takes a string and returns appropriate CommandID
+ */
+CommandID Server::getCommandID(char comnd[]) {
+    if(strcasecmp(comnd, "HELP") == 0)
+        return COMMAND_HELP;
+    else if(strcasecmp(comnd, "CREATOR") == 0)
+        return COMMAND_CREATOR;
+    else if(strcasecmp(comnd, "DISPLAY") == 0)
+        return COMMAND_DISPLAY;
+    else if(strcasecmp(comnd, "LIST") == 0)
+        return COMMAND_LIST;
+    else
+        return COMMAND_NONE;
+}
+
+/*
  * Function:    updateIpAddress()
  * Parameters:  None
  * Returns:     None
@@ -253,7 +281,6 @@ void Server::updateIpAddress() {
     struct ifaddrs *ifAddr;
     char host[INET_ADDRSTRLEN];
 
-    printf("updating ip address \n");
     // ifAddr contains a list of all local interfaces
     getifaddrs(&ifAddr);
     while(ifAddr != NULL) {
@@ -269,5 +296,6 @@ void Server::updateIpAddress() {
         }
         ifAddr = ifAddr->ifa_next;
     }
+    //printf("ip: %s", m_ipAddress);
     return;
 }
