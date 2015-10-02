@@ -22,6 +22,13 @@ Client::Client(int port) {
     this->m_nListenPort = port;
     this->m_bisRegistered = false;
     updateIpAddress();
+
+    FD_ZERO(&m_masterSet);
+	FD_ZERO(&m_readSet);
+	memset(&m_cliListenAddr, 0, sizeof(m_cliListenAddr));
+
+	// starting event handler
+	eventHandler();
 }
 
 /*
@@ -31,6 +38,44 @@ Client::~Client() {
 
 }
 
+void Client::eventHandler() {
+    char buffer[1024];
+    startListenClient();
+
+    for(;;) {
+        // copy master set to read set
+        m_readSet = m_masterSet;
+        // start polling on read set, which is blocking indefinitely
+        if(select(m_nMaxFd+1, &m_readSet, NULL, NULL, NULL) == -1) {
+            perror("select");
+            exit(EXIT_FAILURE);
+        }
+        // check if there is data on any of the sockets
+        int bytesRead;
+        for(int i=0; i<=m_nMaxFd; i++) {
+            if(FD_ISSET(i, &m_readSet)) {
+                if(i == STDIN) {
+                    commandShell();
+                }
+                else if(i == m_nListenSd) {
+                    // new connection
+                	newConnectionHandler();
+                }
+                else {
+                    // handle data from existing connections
+                	char recvBuff[1024];
+                	int nbytes;
+                	if( (nbytes = recv(i, recvBuff, sizeof(recvBuff), 0)) > 0) {
+                		recvBuff[nbytes] = 0;
+                		printf("%s", recvBuff);
+                	}
+                }
+
+            }
+        }
+    }
+}
+
 /*
  * Function:    commandHandler()
  * Parameters:  None
@@ -38,43 +83,41 @@ Client::~Client() {
  * Description: This functions behaves like shell answering all user commands
  */
 void Client::commandShell() {
-    while(1) {
-    	int nArgs;
-    	char **commandTokens = getAndParseCommandLine(nArgs);
-        if(nArgs == 0)
-        	continue;
-        //printf("command[0] %s \n", m_commandTokens[0]);
-        CommandID command_id = getCommandID(commandTokens[0]);
-        switch(command_id) {
-            case COMMAND_HELP:
-                // handle help command
-                command_help();
-                break;
-            case COMMAND_CREATOR:
-                // handle CREATOR command
-                command_creator();
-                break;
-            case COMMAND_DISPLAY:
-                // handle DISPLAY command
-                command_display();
-                break;
-            case COMMAND_LIST:
-                command_list();
-                break;
-            case COMMAND_REGISTER:
-            	// if the server is not yet registered and if the number of arguments is same as expected.
-            	if(!m_bisRegistered && nArgs == 3)
-            		command_register(commandTokens[1], commandTokens[2]);
-            	else
-            		displayUsage();
-            	break;
-            default:
-            	displayUsage();
-                break;
-        }
-        for(int i=0; i<nArgs; i++)
-        	free(commandTokens[i]);
-    }
+	int nArgs;
+	char **commandTokens = getAndParseCommandLine(nArgs);
+	if(nArgs == 0)
+		return;
+	//printf("command[0] %s \n", m_commandTokens[0]);
+	CommandID command_id = getCommandID(commandTokens[0]);
+	switch(command_id) {
+		case COMMAND_HELP:
+			// handle help command
+			command_help();
+			break;
+		case COMMAND_CREATOR:
+			// handle CREATOR command
+			command_creator();
+			break;
+		case COMMAND_DISPLAY:
+			// handle DISPLAY command
+			command_display();
+			break;
+		case COMMAND_LIST:
+			command_list();
+			break;
+		case COMMAND_REGISTER:
+			// if the server is not yet registered and if the number of arguments is same as expected.
+			if(!m_bisRegistered && nArgs == 3)
+				command_register(commandTokens[1], commandTokens[2]);
+			else
+				displayUsage();
+			break;
+		default:
+			displayUsage();
+			break;
+	}
+	for(int i=0; i<nArgs; i++)
+		free(commandTokens[i]);
 }
 
 /*
@@ -150,14 +193,17 @@ int Client::command_register(char *ipAddr, char *port) {
 		exit(EXIT_FAILURE);
 	}
 	m_bisRegistered = true;
-	char recvBuff[1024];
-	int nbytes;
-	if( (nbytes = recv(sockfd, recvBuff, sizeof(recvBuff), 0)) > 0)
-	{
-		recvBuff[nbytes] = 0;
-		printf("%s", recvBuff);
-	}
+	FD_SET(sockfd, &m_masterSet);
+	if(sockfd > m_nMaxFd)
+		m_nMaxFd = sockfd;
 
+	char recvBuff[1024];
+	// send the listening port of the client so that server will update the list
+	snprintf(recvBuff, sizeof(recvBuff), "%d\r\n", m_nListenPort);
+	if(send(sockfd, recvBuff, strlen(recvBuff), 0) != strlen(recvBuff)) {
+		perror("send");
+		exit(EXIT_FAILURE);
+	}
 	return 0;
 }
 
@@ -191,6 +237,48 @@ void Client::command_terminate(int connectionID) {
  */
 void Client::command_quit() {
     // Complete this
+}
+
+void Client::startListenClient() {
+	// add stdin to master set
+	    FD_SET(STDIN, &m_masterSet);
+
+	    // populate server address structure
+	    m_cliListenAddr.sin_family = AF_INET;
+	    m_cliListenAddr.sin_port = htons(m_nListenPort);
+	    if(inet_pton(AF_INET, m_ipAddress, &m_cliListenAddr.sin_addr) != 1) {
+	        perror("inet_pton failure");
+	        exit(EXIT_FAILURE);
+	    }
+	    // create a TCP listening socket
+	    if((m_nListenSd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+	        perror("Listening socket creation failed");
+	        exit(EXIT_FAILURE);
+	    }
+	    // reuse the socket in case of crash
+	    int optval = 1;
+	    if(setsockopt(m_nListenSd, SOL_SOCKET, SO_REUSEADDR, (char *)&optval, sizeof(optval)) < 0) {
+	        perror("setsockopt failed");
+	        exit(EXIT_FAILURE);
+	    }
+	    // bind m_srvAddr to the listening socket
+	    if(bind(m_nListenSd, (struct sockaddr *)&m_cliListenAddr, sizeof(m_cliListenAddr)) < 0) {
+	        perror("bind failed");
+	        exit(EXIT_FAILURE);
+	    }
+	    printf("Server Started listening on port: %d \n", m_nListenPort);
+	    // maximum of 5 pending connections for m_nListenSd socket
+	    if(listen(m_nListenSd, 3)) {
+	        perror("Listen failed");
+	        exit(EXIT_FAILURE);
+	    }
+	    // add listening socket to master set and update m_nMaxFd
+	    FD_SET(m_nListenSd, &m_masterSet);
+	    m_nMaxFd = m_nListenSd;
+}
+
+void Client::newConnectionHandler() {
+	// yet to implement. complete this while implementing connect function
 }
 
 /*****************************************************************************

@@ -25,6 +25,14 @@
 
 using namespace std;
 
+typedef struct {
+	int id;
+	int sockFd;
+	char hostName[1024];
+	char ipAddress[INET_ADDRSTRLEN];
+	int port;
+}clientList;
+
 
 class Server {
 private:
@@ -44,6 +52,9 @@ private:
     fd_set m_readSet;      // list which is a copy of m_nMasterSet and is passed to select() call, since select() call changes the list we don't intend to change m_nMasterSet
     struct sockaddr_in m_srvAddr; // this holds the server address, port and family and this is bind() to listening socket
 
+    clientList m_cList[10];	// maximum of 10 clients
+    int m_nClientCount;
+
 public:
     // constructor and destructor
     Server(int port);
@@ -60,14 +71,15 @@ private:
     void command_help();
     void command_creator();
     void command_display();
-    int command_register();
     void command_list();
-    void command_terminate(int connectionId);
-    void command_quit();
 
+    void startListenServer();
+    void newConnectionHandler();
     // Utility functions
     CommandID getCommandID(char comnd[]);
     void updateIpAddress();
+    void addClienttoList(int sockfd, char *ipAddr, int port);
+    void updateClients();
 };
 
 #endif /* !SERVER_H */

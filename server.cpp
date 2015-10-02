@@ -19,6 +19,7 @@
  */
 Server::Server(int port) {
     this->m_nListenPort = port;
+    this->m_nClientCount = 0;
     updateIpAddress();
 
     // initalize server specific parameters
@@ -45,41 +46,7 @@ Server::~Server() {
  */
 void Server::eventHandler() {
     char buffer[1024];
-    // add stdin to master set
-    FD_SET(STDIN, &m_masterSet);
-
-    // populate server address structure
-    m_srvAddr.sin_family = AF_INET;
-    m_srvAddr.sin_port = htons(m_nListenPort);
-    if(inet_pton(AF_INET, m_ipAddress, &m_srvAddr.sin_addr) != 1) {
-        perror("inet_pton failure");
-        exit(EXIT_FAILURE);
-    }
-    // create a TCP listening socket
-    if((m_nListenSd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
-        perror("Listening socket creation failed");
-        exit(EXIT_FAILURE);
-    }
-    // reuse the socket in case of crash
-    int optval = 1;
-    if(setsockopt(m_nListenSd, SOL_SOCKET, SO_REUSEADDR, (char *)&optval, sizeof(optval)) < 0) {
-        perror("setsockopt failed");
-        exit(EXIT_FAILURE);
-    }
-    // bind m_srvAddr to the listening socket
-    if(bind(m_nListenSd, (struct sockaddr *)&m_srvAddr, sizeof(m_srvAddr)) < 0) {
-        perror("bind failed");
-        exit(EXIT_FAILURE);
-    }
-    printf("Server Started listening on port: %d \n", m_nListenPort);
-    // maximum of 5 pending connections for m_nListenSd socket
-    if(listen(m_nListenSd, 5)) {
-        perror("Listen failed");
-        exit(EXIT_FAILURE);
-    }
-    // add listening socket to master set and update m_nMaxFd
-    FD_SET(m_nListenSd, &m_masterSet);
-    m_nMaxFd = m_nListenSd;
+    startListenServer();
     
     for(;;) {
         // copy master set to read set
@@ -102,27 +69,7 @@ void Server::eventHandler() {
                 }
                 else if(i == m_nListenSd) {
                     // new connection
-                	int newConnSd;
-                	char remoteIP[INET_ADDRSTRLEN];
-                	struct sockaddr_in remoteaddr;
-                	remoteaddr.sin_family = AF_INET;
-                	memset(&remoteaddr, 0, sizeof(remoteaddr));
-                	int addrlen = sizeof(remoteaddr);
-					if((newConnSd = accept(m_nListenSd, (struct sockaddr*)&remoteaddr, (socklen_t*)&addrlen)) == -1) {
-						perror("accept");
-						exit(EXIT_FAILURE);
-					}
-					printf("new connection from %s on ""socket %d\n", inet_ntop(AF_INET, &remoteaddr.sin_addr, remoteIP, INET_ADDRSTRLEN), newConnSd);
-                	FD_SET(newConnSd, &m_masterSet);
-					if (newConnSd > m_nMaxFd) {
-						m_nMaxFd = newConnSd;
-					}
-                	char sendBuff[1024];
-                	snprintf(sendBuff, sizeof(sendBuff), "connection successful\r\n");
-                	if( send(newConnSd, sendBuff, strlen(sendBuff), 0) != strlen(sendBuff) )
-					{
-						perror("send");
-					}
+                	newConnectionHandler();
                 }
                 else {
                     // handle data from existing client
@@ -140,7 +87,6 @@ void Server::eventHandler() {
  * Description: This functions behaves like shell answering all user commands
  */
 void Server::commandShell(char *command) {
-    printf("command: %s \n", command);
     CommandID command_id = getCommandID(command); 
     switch(command_id) {
         case COMMAND_HELP:
@@ -206,16 +152,6 @@ void Server::command_display() {
 }
 
 /*
- * Function:    Command_Register()
- * Parameters:  IP address of the client and Listening port number
- * Returns:     1 if successful else 0
- * Description: This functions adds the IP address and listening port of the client, which sent register command, to registered_list.
- */
-int Server::command_register() {
-    // Complete this and also fill appropriate parameters
-}
-
-/*
  * Function:    Command_list()
  * Parameters:  None
  * Returns:     None
@@ -227,24 +163,76 @@ void Server::command_list() {
     // Complete this
 }
 
-/*
- * Function:    Command_terminate(int connectionId)
- * Parameters:  int connectionId
- * Returns:     None
- * Description: This functions will terminate a connection already in registered_list
- */
-void Server::command_terminate(int connectionId) {
-    // Complete this
+void Server::startListenServer() {
+	// add stdin to master set
+	    FD_SET(STDIN, &m_masterSet);
+
+	    // populate server address structure
+	    m_srvAddr.sin_family = AF_INET;
+	    m_srvAddr.sin_port = htons(m_nListenPort);
+	    if(inet_pton(AF_INET, m_ipAddress, &m_srvAddr.sin_addr) != 1) {
+	        perror("inet_pton failure");
+	        exit(EXIT_FAILURE);
+	    }
+	    // create a TCP listening socket
+	    if((m_nListenSd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+	        perror("Listening socket creation failed");
+	        exit(EXIT_FAILURE);
+	    }
+	    // reuse the socket in case of crash
+	    int optval = 1;
+	    if(setsockopt(m_nListenSd, SOL_SOCKET, SO_REUSEADDR, (char *)&optval, sizeof(optval)) < 0) {
+	        perror("setsockopt failed");
+	        exit(EXIT_FAILURE);
+	    }
+	    // bind m_srvAddr to the listening socket
+	    if(bind(m_nListenSd, (struct sockaddr *)&m_srvAddr, sizeof(m_srvAddr)) < 0) {
+	        perror("bind failed");
+	        exit(EXIT_FAILURE);
+	    }
+	    printf("Server Started listening on port: %d \n", m_nListenPort);
+	    // maximum of 5 pending connections for m_nListenSd socket
+	    if(listen(m_nListenSd, 5)) {
+	        perror("Listen failed");
+	        exit(EXIT_FAILURE);
+	    }
+	    // add listening socket to master set and update m_nMaxFd
+	    FD_SET(m_nListenSd, &m_masterSet);
+	    m_nMaxFd = m_nListenSd;
 }
 
-/*
- * Function:    Command_quit()
- * Parameters:  None
- * Returns:     None
- * Description: This functions closes all connections and terminates this process
- */
-void Server::command_quit() {
-    // Complete this
+void Server::newConnectionHandler() {
+	int newConnSd;
+	char remoteIP[INET_ADDRSTRLEN];
+	struct sockaddr_in remoteaddr;
+	memset(&remoteaddr, 0, sizeof(remoteaddr));
+	remoteaddr.sin_family = AF_INET;
+	int addrlen = sizeof(remoteaddr);
+	if((newConnSd = accept(m_nListenSd, (struct sockaddr*)&remoteaddr, (socklen_t*)&addrlen)) == -1) {
+		perror("accept");
+		exit(EXIT_FAILURE);
+	}
+	printf("new connection from %s on ""socket %d\n", inet_ntop(AF_INET, &remoteaddr.sin_addr, remoteIP, INET_ADDRSTRLEN), newConnSd);
+	FD_SET(newConnSd, &m_masterSet);
+	if (newConnSd > m_nMaxFd) {
+		m_nMaxFd = newConnSd;
+	}
+	// sending connection successful string
+	char recvBuff[1024];
+	// read the listening port of the connected client
+	int nbytes;
+	if((nbytes = recv(newConnSd, recvBuff, sizeof(recvBuff), 0)) > 0)
+	{
+		recvBuff[nbytes] = 0;
+		printf("%s", recvBuff);
+	}
+
+	int clientLisPort = atoi(recvBuff);
+	printf("clientLisPort %d\n", clientLisPort);
+	// add the new client to cList
+	addClienttoList(newConnSd, remoteIP, clientLisPort);
+	// publish previously registered clients to this client
+	updateClients();
 }
 
 /*****************************************************************************
@@ -297,4 +285,41 @@ void Server::updateIpAddress() {
     }
     //printf("ip: %s", m_ipAddress);
     return;
+}
+
+void Server::addClienttoList(int sockfd, char *ipAddr, int port) {
+	m_cList[m_nClientCount].id = m_nClientCount+1;
+	m_cList[m_nClientCount].sockFd = sockfd;
+	m_cList[m_nClientCount].port = port;
+	strcpy(m_cList[m_nClientCount].ipAddress, ipAddr);
+
+	struct in_addr ipv4addr;
+	if(!inet_aton(ipAddr, &ipv4addr)) {
+		perror("inet_aton");
+		exit(EXIT_FAILURE);
+	}
+	struct hostent *host;
+	if((host = gethostbyaddr((const void*)&ipv4addr, sizeof ipv4addr, AF_INET)) == NULL) {
+		perror("gethostbyaddr");
+		exit(EXIT_FAILURE);
+	}
+	strcpy(m_cList[m_nClientCount].hostName, host->h_name);
+	printf("Connection Successful from %s[%s] on port %d\n", m_cList[m_nClientCount].hostName, m_cList[m_nClientCount].ipAddress, m_cList[m_nClientCount].port);
+	m_nClientCount++;
+}
+
+void Server::updateClients() {
+	char buffer[1024];
+	printf("currently active clients :%d \n", m_nClientCount);
+	for(int j=0; j<m_nClientCount; j++) {
+		for(int i=0; i<m_nClientCount; i++) {
+			snprintf(buffer, sizeof(buffer), "%d %s %d \r\n", m_cList[i].id, m_cList[i].ipAddress, m_cList[i].port);
+			printf("%s", buffer);
+			printf("sending data to client:%d on socket %d \n", j, m_cList[j].sockFd);
+			if(send(m_cList[j].sockFd, buffer, strlen(buffer), 0) != strlen(buffer))
+			{
+				perror("send");
+			}
+		}
+	}
 }
