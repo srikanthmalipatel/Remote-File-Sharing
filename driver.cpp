@@ -38,7 +38,6 @@ int main(int argc, char* argv[]) {
     else if(strcmp("c", argv[1]) == 0 && port > 1024) {
         // execute client code
         Client lClient(port);
-        lClient.commandShell();
     }
     else {
         printUsage(argc, argv);

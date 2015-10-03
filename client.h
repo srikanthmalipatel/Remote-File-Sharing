@@ -31,7 +31,7 @@ typedef struct {
 	char hostName[1024];
 	char ipAddress[INET_ADDRSTRLEN];
 	int port;
-}clientList;
+}registeredClientList;
 
 class Client {
 private:
@@ -52,7 +52,7 @@ private:
 	fd_set m_readSet;      // list which is a copy of m_nMasterSet and is passed to select() call, since select() call changes the list we don't intend to change m_nMasterSet
 	struct sockaddr_in m_cliListenAddr; // this holds its address, port and family and this is bind() to listening socket
 
-	clientList m_cList[10];	// maximum of 10 clients
+	registeredClientList m_cList[10];	// maximum of 10 clients
         int m_nClientCount;
 
     // register
