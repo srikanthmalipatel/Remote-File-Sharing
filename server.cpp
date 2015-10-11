@@ -333,7 +333,7 @@ void Server::updateIpAddress() {
 
 void Server::updateNodesinList() {
 	cout<<m_nodeList[m_nLatestIndex].ip_addr<<":"<<m_nodeList[m_nLatestIndex].listenPort<<" Registered Successfully. " << endl;
-	char msg[256]={0};
+	char msg[512]={0};
 	// constructing a message in format: UPDATE CL1.ip CL1.host CL1.port|CL2.ip CL2.host CL2.port|....
 	strcat(msg,"UPDATE ");
 	for(int i=0; i<10; i++)

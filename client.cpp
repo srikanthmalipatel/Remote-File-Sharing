@@ -231,7 +231,7 @@ int Client::command_register(char *ipAddr, char *port) {
 
 		// update server details with the first unused nodeList
 		for(int i=0; i<10; i++) {
-			if(m_nodeList[i].isUsed == true) {
+			if(m_nodeList[i].isUsed == false) {
 				m_nodeList[i].sockFd = m_nServerSd;
 				m_nodeList[i].isUsed = true;
 				m_nodeList[i].isServer = true;

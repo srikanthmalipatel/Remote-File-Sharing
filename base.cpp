@@ -31,26 +31,7 @@ int Base::sendall(int sockFd, char *buf, int *length)
 }
 
 void Base::getHostName(char *ip, char *buf) {
-	/*struct sockaddr_in remoteAddress;
-	socklen_t len = sizeof(remoteAddress);
-	if (getpeername(sockFd, (struct sockaddr*)&remoteAddress, &len)!=0)
-	{
-		// could not get socket info of the peer so to identify hostname will be server
-		cout << "getpeername error" << endl;
-		strcpy(buf,"SERVER");
-	}
-	else
-	{
-		len = sizeof(remoteAddress);
-		if(getnameinfo((struct sockaddr*)&remoteAddress, remoteAddress.sin_len, buf, sizeof(buf), NULL, 0, NI_NUMERICHOST)!=0)
-		{
-			// could not resolve host info of the peer so to identify hostname will be server
-			cout << "getnameinfo error" << endl;
-			strcpy(buf,"SERVER");
-		}
-	}
-	cout << "getHostName buf: " << buf << endl;*/
-	printf("ip %s \n", ip);
+	//printf("ip %s \n", ip);
 	struct in_addr ipv4addr;
 	if(!inet_aton(ip, &ipv4addr)) {
 		perror("inet_aton");
