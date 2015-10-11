@@ -18,9 +18,19 @@
  * Function:    Constructor
  */
 Client::Client(int port) {
-    printf("Starting client on Port: %d \n", port);
+	cout << "Running program as Client" << endl;
+    // update instance variables
     this->m_nListenPort = port;
     this->m_bisRegistered = false;
+
+    // initalize nodeList and its tracker
+    this->m_nLatestIndex = 0;
+    for(int i=0; i<10; i++)
+	{
+    	m_nodeList[i].isUsed=false;
+    	m_nodeList[i].isServer=false;
+	}
+    // move this to common.cpp
     updateIpAddress();
 
     FD_ZERO(&m_masterSet);
@@ -52,6 +62,7 @@ void Client::eventHandler() {
         }
         // check if there is data on any of the sockets
         int bytesRead;
+        char recvBuff[1024];
         for(int i=0; i<=m_nMaxFd; i++) {
             if(FD_ISSET(i, &m_readSet)) {
                 if(i == STDIN) {
@@ -61,14 +72,18 @@ void Client::eventHandler() {
                     // new connection
                 	newConnectionHandler();
                 }
-                else {
-                    // handle data from existing connections
-                	char recvBuff[1024];
-                	int nbytes;
-                	if( (nbytes = recv(i, recvBuff, sizeof(recvBuff), 0)) > 0) {
-                		recvBuff[nbytes] = 0;
-                		printf("%s", recvBuff);
+                else if(i == m_nServerSd) {
+                	// server sends client list updates when ever a new client registers/terminates/quits
+                	if( (bytesRead = recv(i, recvBuff, sizeof(recvBuff), 0)) > 0)
+                	{
+                		printf("data received from server %s\n", recvBuff);
+                		recvBuff[bytesRead] = 0;
+                		//updateRegisteredClientList(recvBuff);
                 	}
+                }
+                else {
+                    // handle data from connected clients
+
                 }
 
             }
@@ -84,7 +99,12 @@ void Client::eventHandler() {
  */
 void Client::commandShell() {
 	int nArgs;
-	char **commandTokens = getAndParseCommandLine(nArgs);
+	char *commandLine = NULL;
+	size_t size;
+	// read the command from stdin
+	ssize_t linelen = getline(&commandLine, &size, stdin);
+	commandLine[linelen-1] = '\0';
+	char **commandTokens = parseLine(commandLine, nArgs, " \0");
 	if(nArgs == 0)
 		return;
 	//printf("command[0] %s \n", m_commandTokens[0]);
@@ -170,7 +190,6 @@ int Client::command_register(char *ipAddr, char *port) {
 	struct sockaddr_in srvAddr;
 	int srvPort = atoi(port);
 	strcpy(m_srvIpAddress, ipAddr);
-	int sockfd;
 
 	// populate server address structure and also check if it is a valid ip address
 	memset(&srvAddr, 0, sizeof(srvAddr));
@@ -181,29 +200,56 @@ int Client::command_register(char *ipAddr, char *port) {
 		displayUsage();
 	}
 
-	if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+	if((m_nServerSd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
 	{
 		perror("socket");
 		exit(EXIT_FAILURE);
 	}
 
-	if( connect(sockfd, (struct sockaddr *)&srvAddr, sizeof(srvAddr)) < 0)
+	if( connect(m_nServerSd, (struct sockaddr *)&srvAddr, sizeof(srvAddr)) < 0)
 	{
 		perror("connect");
 		exit(EXIT_FAILURE);
 	}
-	m_bisRegistered = true;
-	FD_SET(sockfd, &m_masterSet);
-	if(sockfd > m_nMaxFd)
-		m_nMaxFd = sockfd;
 
-	char recvBuff[1024];
-	// send the listening port of the client so that server will update the list
-	snprintf(recvBuff, sizeof(recvBuff), "%d\r\n", m_nListenPort);
-	if(send(sockfd, recvBuff, strlen(recvBuff), 0) != strlen(recvBuff)) {
-		perror("send");
-		exit(EXIT_FAILURE);
+	// construct register message
+	char msg[64] = {0};
+	strcat(msg, "REGISTER ");
+	char tmpport[4];
+	sprintf(tmpport, "%d", m_nListenPort);
+	strcat(msg, tmpport);
+	cout << "sending message " << msg << " to server" << endl;
+
+	// send register message to server
+	int len = strlen(msg);
+	if(sendall(m_nServerSd, msg, &len) == -1) {
+		cout << "Message sending failed. Please retry" << endl;
 	}
+	else {
+		m_bisRegistered = true;
+		cout << "REGISTER message Sent. Waiting for Updated Client List from server" << endl;
+
+		// update server details with the first unused nodeList
+		for(int i=0; i<10; i++) {
+			if(m_nodeList[i].isUsed == true) {
+				m_nodeList[i].sockFd = m_nServerSd;
+				m_nodeList[i].isUsed = true;
+				m_nodeList[i].isServer = true;
+				m_nodeList[i].listenPort = srvPort;
+				strcpy(m_nodeList[i].ip_addr, m_srvIpAddress);
+				getHostName(m_nodeList[i].ip_addr, m_nodeList[i].hostName);
+				m_nLatestIndex = i;
+				break;
+			}
+		}
+		cout << "Registered with server " << m_nodeList[m_nLatestIndex].ip_addr << ":" << m_nodeList[m_nLatestIndex].listenPort << " Updated nodeList with server details" << endl;
+
+		// adding this socket to masterset so that client can update nodeList when server sends messages on new client registration or termination/exit.
+		FD_SET(m_nServerSd, &m_masterSet);
+		if(m_nServerSd > m_nMaxFd)
+			m_nMaxFd = m_nServerSd;
+	}
+
 	return 0;
 }
 
@@ -246,6 +292,7 @@ void Client::startListenClient() {
 	    // populate server address structure
 	    m_cliListenAddr.sin_family = AF_INET;
 	    m_cliListenAddr.sin_port = htons(m_nListenPort);
+	    printf("m_ipAddress %s\n", m_ipAddress);
 	    if(inet_pton(AF_INET, m_ipAddress, &m_cliListenAddr.sin_addr) != 1) {
 	        perror("inet_pton failure");
 	        exit(EXIT_FAILURE);
@@ -266,7 +313,7 @@ void Client::startListenClient() {
 	        perror("bind failed");
 	        exit(EXIT_FAILURE);
 	    }
-	    printf("Server Started listening on port: %d \n", m_nListenPort);
+	    printf("Client is now listening on port: %d \n", m_nListenPort);
 	    // maximum of 5 pending connections for m_nListenSd socket
 	    if(listen(m_nListenSd, 3)) {
 	        perror("Listen failed");
@@ -285,18 +332,11 @@ void Client::newConnectionHandler() {
  *                      Server utility functions                             *
  * **************************************************************************/
 
-char** Client::getAndParseCommandLine(int &nArgs) {
-	// read the command from stdin
-	char *commandLine = NULL;
-	size_t size;
-	ssize_t linelen;
-	linelen = getline(&commandLine, &size, stdin);
-	commandLine[linelen-1] = '\0';
-
-	char **tokens = (char **) malloc(4*sizeof(char *));
-	char *tok = strtok(commandLine, " \0");
+char** Client::parseLine(char *line, int &nArgs, const char *delim) {
+	char **tokens = (char **) malloc(10*sizeof(char *));
+	char *tok = strtok(line, delim);
 	nArgs = 0;
-	while(tok!=NULL && nArgs < 4) {
+	while(tok!=NULL) {
 		//printf("tok %s \n", tok);
 		tokens[nArgs] = (char *) malloc(sizeof(strlen(tok)*sizeof(char)));
 		strcpy(tokens[nArgs], tok);
@@ -336,7 +376,7 @@ CommandID Client::getCommandID(char comnd[]) {
  */
 void Client::updateIpAddress() {
     struct ifaddrs *ifAddr;
-    char host[INET_ADDRSTRLEN];
+    char host[32];
 
     // ifAddr contains a list of all local interfaces
     getifaddrs(&ifAddr);
@@ -347,8 +387,8 @@ void Client::updateIpAddress() {
         // We need to consider only ipv4 address
         if(ifAddr->ifa_addr->sa_family == AF_INET) {
             // get the ip address of this interface and update if it is not a local or private ip address
-            getnameinfo(ifAddr->ifa_addr, sizeof(struct sockaddr_in), host, INET_ADDRSTRLEN, NULL, 0, NI_NUMERICHOST);
-            if(strcmp(host,"127.0.0.1") != 0 && strstr(host, "192.168") == NULL) 
+            getnameinfo(ifAddr->ifa_addr, sizeof(struct sockaddr_in), host, 32, NULL, 0, NI_NUMERICHOST);
+            if(strcmp(host,"127.0.0.1") != 0)
                 strcpy(m_ipAddress, host);
         }
         ifAddr = ifAddr->ifa_next;

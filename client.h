@@ -19,21 +19,13 @@
 #include <ifaddrs.h>
 #include <netdb.h>
 #include <unistd.h>
-#include "common.h"
+#include "base.h"
 
 using namespace std;
 
 #define MAX_CREATOR_LEN 100
 
-typedef struct {
-	int id;
-	int sockFd;
-	char hostName[1024];
-	char ipAddress[INET_ADDRSTRLEN];
-	int port;
-}registeredClientList;
-
-class Client {
+class Client:public Base {
 private:
     // creator constants
     char* m_name;
@@ -42,18 +34,16 @@ private:
 
     // client utilites
     int m_nListenPort;
-    char m_ipAddress[INET_ADDRSTRLEN];
-    char m_srvIpAddress[INET_ADDRSTRLEN];
+    char m_ipAddress[32];
+    char m_srvIpAddress[32]; // this would no longer be required becz nodeList[0] contains server details.
 
     // socket specific members
 	int m_nListenSd;        // listen socket descriptor
+	int m_nServerSd;		// socket used for connecting to the server, this is used when server sends client list updates
 	int m_nMaxFd;           // Maximum file descriptor number
 	fd_set m_masterSet;    // list which holds all the active connections including listening socket and stdin
 	fd_set m_readSet;      // list which is a copy of m_nMasterSet and is passed to select() call, since select() call changes the list we don't intend to change m_nMasterSet
 	struct sockaddr_in m_cliListenAddr; // this holds its address, port and family and this is bind() to listening socket
-
-	registeredClientList m_cList[10];	// maximum of 10 clients
-        int m_nClientCount;
 
     // register
     bool m_bisRegistered;
@@ -83,7 +73,7 @@ private:
 	void newConnectionHandler();
 
 	// utility functions
-    char** getAndParseCommandLine(int &nArgs);
+    char** parseLine(char *line, int &nArgs, const char *delim);
     CommandID getCommandID(char *comnd);
     void updateIpAddress();
     void displayUsage();

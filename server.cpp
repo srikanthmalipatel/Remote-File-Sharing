@@ -18,9 +18,18 @@
  * Function:    Constructor
  */
 Server::Server(int port) {
+	cout << "Running program as server" << endl;
     this->m_nListenPort = port;
-    this->m_nClientCount = 0;
+    this->m_nLatestIndex = 0;
+
+    // initalize nodeList and its tracker
+	for(int i=0; i<10; i++)
+	{
+		m_nodeList[i].isUsed=false;
+		m_nodeList[i].isServer=false;
+	}
     updateIpAddress();
+    printf("server IP: %s \n", m_ipAddress);
 
     // initalize server specific parameters
     FD_ZERO(&m_masterSet);
@@ -190,7 +199,7 @@ void Server::startListenServer() {
 	        perror("bind failed");
 	        exit(EXIT_FAILURE);
 	    }
-	    printf("Server Started listening on port: %d \n", m_nListenPort);
+	    printf("Server is now listening on port: %d \n", m_nListenPort);
 	    // maximum of 5 pending connections for m_nListenSd socket
 	    if(listen(m_nListenSd, 5)) {
 	        perror("Listen failed");
@@ -203,7 +212,7 @@ void Server::startListenServer() {
 
 void Server::newConnectionHandler() {
 	int newConnSd;
-	char remoteIP[INET_ADDRSTRLEN];
+	char remoteIP[32];
 	struct sockaddr_in remoteaddr;
 	memset(&remoteaddr, 0, sizeof(remoteaddr));
 	remoteaddr.sin_family = AF_INET;
@@ -212,27 +221,41 @@ void Server::newConnectionHandler() {
 		perror("accept");
 		exit(EXIT_FAILURE);
 	}
-	printf("new connection from %s on ""socket %d\n", inet_ntop(AF_INET, &remoteaddr.sin_addr, remoteIP, INET_ADDRSTRLEN), newConnSd);
+	printf("new connection from %s on ""socket %d\n", inet_ntop(AF_INET, &remoteaddr.sin_addr, remoteIP, 32), newConnSd);
+
+	// process Register message from client
+	char buffer[64];
+	int nbytes;
+	if((nbytes = recv(newConnSd, buffer, sizeof(buffer), 0)) > 0)
+	{
+		buffer[nbytes] = 0;
+		//printf("%s", buffer);
+	}
+	// register message format: REGISTER PORT
+	if(strstr(buffer, "REGISTER") != NULL) {
+		strtok(buffer," ");
+		char *port=strtok(NULL," ");
+		// find the first unused node and update the client details
+		for(int i=0; i<10; i++) {
+			if(m_nodeList[i].isUsed == false) {
+				m_nodeList[i].isUsed=true;
+				m_nodeList[i].listenPort =strtol(port, NULL, 10);
+				m_nodeList[i].sockFd = newConnSd;
+				strcpy(m_nodeList[i].ip_addr,remoteIP);
+				getHostName(m_nodeList[i].ip_addr, m_nodeList[i].hostName);
+				m_nLatestIndex = i;
+				break;
+			}
+		}
+		// update all the clients with the new list
+		updateNodesinList();
+	}
+
+	// add the client to masterSet such that server can read messages from clients, if any.
 	FD_SET(newConnSd, &m_masterSet);
 	if (newConnSd > m_nMaxFd) {
 		m_nMaxFd = newConnSd;
 	}
-	// sending connection successful string
-	char recvBuff[1024];
-	// read the listening port of the connected client
-	int nbytes;
-	if((nbytes = recv(newConnSd, recvBuff, sizeof(recvBuff), 0)) > 0)
-	{
-		recvBuff[nbytes] = 0;
-		printf("%s", recvBuff);
-	}
-
-	int clientLisPort = atoi(recvBuff);
-	printf("clientLisPort %d\n", clientLisPort);
-	// add the new client to cList
-	addClienttoList(newConnSd, remoteIP, clientLisPort);
-	// publish previously registered clients to this client
-	updateClients();
 }
 
 /*****************************************************************************
@@ -266,7 +289,7 @@ CommandID Server::getCommandID(char comnd[]) {
  */
 void Server::updateIpAddress() {
     struct ifaddrs *ifAddr;
-    char host[INET_ADDRSTRLEN];
+    char host[32];
 
     // ifAddr contains a list of all local interfaces
     getifaddrs(&ifAddr);
@@ -277,7 +300,7 @@ void Server::updateIpAddress() {
         // We need to consider only ipv4 address
         if(ifAddr->ifa_addr->sa_family == AF_INET) {
             // get the ip address of this interface and update if it is not a local or private ip address
-            getnameinfo(ifAddr->ifa_addr, sizeof(struct sockaddr_in), host, INET_ADDRSTRLEN, NULL, 0, NI_NUMERICHOST);
+            getnameinfo(ifAddr->ifa_addr, sizeof(struct sockaddr_in), host, 32, NULL, 0, NI_NUMERICHOST);
             if(strcmp(host,"127.0.0.1") != 0) 
                 strcpy(m_ipAddress, host);
         }
@@ -287,7 +310,7 @@ void Server::updateIpAddress() {
     return;
 }
 
-void Server::addClienttoList(int sockfd, char *ipAddr, int port) {
+/*void Server::addNodetoList(int sockfd, char *ipAddr, int port) {
 	m_cList[m_nClientCount].id = m_nClientCount+1;
 	m_cList[m_nClientCount].sockFd = sockfd;
 	m_cList[m_nClientCount].port = port;
@@ -306,20 +329,48 @@ void Server::addClienttoList(int sockfd, char *ipAddr, int port) {
 	strcpy(m_cList[m_nClientCount].hostName, host->h_name);
 	printf("Connection Successful from %s[%s] on port %d\n", m_cList[m_nClientCount].hostName, m_cList[m_nClientCount].ipAddress, m_cList[m_nClientCount].port);
 	m_nClientCount++;
-}
+}*/
 
-void Server::updateClients() {
-	char buffer[1024];
-	printf("currently active clients :%d \n", m_nClientCount);
-	for(int j=0; j<m_nClientCount; j++) {
-		for(int i=0; i<m_nClientCount; i++) {
-			snprintf(buffer, sizeof(buffer), "%d %s %d \r\n", m_cList[i].id, m_cList[i].ipAddress, m_cList[i].port);
-			printf("%s", buffer);
-			printf("sending data to client:%d on socket %d \n", j, m_cList[j].sockFd);
-			if(send(m_cList[j].sockFd, buffer, strlen(buffer), 0) != strlen(buffer))
+void Server::updateNodesinList() {
+	cout<<m_nodeList[m_nLatestIndex].ip_addr<<":"<<m_nodeList[m_nLatestIndex].listenPort<<" Registered Successfully. " << endl;
+	char msg[256]={0};
+	// constructing a message in format: UPDATE CL1.ip CL1.host CL1.port|CL2.ip CL2.host CL2.port|....
+	strcat(msg,"UPDATE ");
+	for(int i=0; i<10; i++)
+	{
+		if(m_nodeList[i].isUsed==true)
+		{
+			char port[4];
+			sprintf(port,"%d",m_nodeList[i].listenPort);
+			strcat(msg,m_nodeList[i].ip_addr);
+			strcat(msg," ");
+			strcat(msg,m_nodeList[i].hostName);
+			strcat(msg," ");
+			strcat(msg,port);
+			strcat(msg,"|");
+		}
+	}
+	// ****UPDATE REQUIRED ****
+	// send data about newly added client to already registered clients
+	// send all the data about existing clients to the newly registered clients
+	int length=sizeof(msg);
+	for(int i=0; i<10; i++)
+	{
+		if (m_nodeList[i].isUsed==true)
+		{
+			cout << "sending message to " << m_nodeList[i].sockFd << " " << msg <<endl;
+			if (sendall(m_nodeList[i].sockFd, msg, &length) == -1)
 			{
-				perror("send");
+				cerr<<"Error Sending List Updates"<<endl;
+			}
+			else
+			{
+				if(length<sizeof(msg))
+				{
+					cout << "Only " << length << "bytes sent but msg size " << sizeof(msg) << endl;
+				}
 			}
 		}
 	}
+	cout << "Client Added To List. "<<endl<<"List Update Sent."<<endl;
 }

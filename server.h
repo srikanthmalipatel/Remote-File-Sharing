@@ -21,20 +21,11 @@
 // above headers required for updateIpAddress() function
 #include <sys/socket.h>
 #include <unistd.h>
-#include "common.h"
+#include "base.h"
 
 using namespace std;
 
-typedef struct {
-	int id;
-	int sockFd;
-	char hostName[1024];
-	char ipAddress[INET_ADDRSTRLEN];
-	int port;
-}clientList;
-
-
-class Server {
+class Server: public Base{
 private:
     // creator constants
     char* m_name;
@@ -43,7 +34,7 @@ private:
 
     // server details
     int m_nListenPort;
-    char m_ipAddress[INET_ADDRSTRLEN];
+    char m_ipAddress[32];
 
     // socket specific members
     int m_nListenSd;        // listen socket descriptor
@@ -51,9 +42,6 @@ private:
     fd_set m_masterSet;    // list which holds all the active connections including listening socket and stdin
     fd_set m_readSet;      // list which is a copy of m_nMasterSet and is passed to select() call, since select() call changes the list we don't intend to change m_nMasterSet
     struct sockaddr_in m_srvAddr; // this holds the server address, port and family and this is bind() to listening socket
-
-    clientList m_cList[10];	// maximum of 10 clients
-    int m_nClientCount;
 
 public:
     // constructor and destructor
@@ -78,8 +66,7 @@ private:
     // Utility functions
     CommandID getCommandID(char comnd[]);
     void updateIpAddress();
-    void addClienttoList(int sockfd, char *ipAddr, int port);
-    void updateClients();
+    void updateNodesinList();
 };
 
 #endif /* !SERVER_H */
