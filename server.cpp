@@ -25,7 +25,7 @@ Server::Server(int port) {
     // initalize nodeList and its tracker
 	for(int i=0; i<10; i++)
 	{
-		m_nodeList[i].isUsed=false;
+		m_nodeList[i].state=INACTIVE;
 		m_nodeList[i].isServer=false;
 	}
     updateIpAddress();
@@ -237,8 +237,8 @@ void Server::newConnectionHandler() {
 		char *port=strtok(NULL," ");
 		// find the first unused node and update the client details
 		for(int i=0; i<10; i++) {
-			if(m_nodeList[i].isUsed == false) {
-				m_nodeList[i].isUsed=true;
+			if(m_nodeList[i].state == INACTIVE) {
+				m_nodeList[i].state=ACTIVE;
 				m_nodeList[i].listenPort =strtol(port, NULL, 10);
 				m_nodeList[i].sockFd = newConnSd;
 				strcpy(m_nodeList[i].ip_addr,remoteIP);
@@ -247,6 +247,18 @@ void Server::newConnectionHandler() {
 				break;
 			}
 		}
+		/*
+		// send REGISTER OK message to the client
+		memset(buffer, 0 ,sizeof(buffer));
+		strcat(buffer, "REGISTER OK");
+		cout << "Sending Message " << buffer << " to client " << remoteIP << endl;
+
+		int len = strlen(buffer);
+		if(sendall(newConnSd, buffer, &len) == -1) {
+			cout << "Message sending failed. Please retry" << endl;
+			return;
+		}
+		*/
 		// update all the clients with the new list
 		updateNodesinList();
 	}
@@ -340,10 +352,10 @@ void Server::updateNodesinList() {
 		strcat(msg,"UPDATE ");
 
 		// sending data for all used nodes excluding details about it self
-		if(m_nodeList[j].isUsed==true) {
+		if(m_nodeList[j].state==ACTIVE) {
 			for(int i=0; i<10; i++)
 			{
-				if(m_nodeList[i].isUsed==true && i!=j)
+				if(m_nodeList[i].state==ACTIVE && i!=j)
 				{
 					char port[4];
 					sprintf(port,"%d",m_nodeList[i].listenPort);

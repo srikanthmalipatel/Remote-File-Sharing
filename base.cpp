@@ -30,20 +30,41 @@ int Base::sendall(int sockFd, char *buf, int *length)
 	return 0;	// success
 }
 
-void Base::getHostName(char *ip, char *buf) {
-	//printf("ip %s \n", ip);
+bool Base::getHostName(char *ip, char *buf, bool printErr) {
+	struct hostent *host;
 	struct in_addr ipv4addr;
 	if(!inet_aton(ip, &ipv4addr)) {
-		perror("inet_aton");
-		exit(EXIT_FAILURE);
+		if(printErr)
+			perror("inet_aton");
+		return false;
 	}
-	struct hostent *host;
+
 	if((host = gethostbyaddr((const void*)&ipv4addr, sizeof ipv4addr, AF_INET)) == NULL) {
-		perror("gethostbyaddr");
-		exit(EXIT_FAILURE);
+		if(printErr)
+			perror("gethostbyaddr");
+		return false;
 	}
 	strcpy(buf, host->h_name);
+	return true;
+}
 
+bool Base::getIPaddress(char *hostname, char *buf, bool printErr) {
+	struct hostent *host;
+	struct in_addr **ipv4addr;
+	if ( (host = gethostbyname( hostname ) ) == NULL)
+	{
+		if(printErr)
+			perror("gethostbyname");
+		return false;
+	}
+
+	ipv4addr = (struct in_addr **) host->h_addr_list;
+	for(int i = 0; ipv4addr[i] != NULL; i++)
+	{
+		strcpy(buf , inet_ntoa(*ipv4addr[i]) );
+		return true;
+	}
+	return false;
 }
 
 

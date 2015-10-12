@@ -36,13 +36,21 @@ typedef enum {
     COMMAND_DISPLAY,
     COMMAND_LIST,
 	COMMAND_REGISTER,
+	COMMAND_CONNECT,
     COMMAND_NONE=-1,
 }CommandID;
 
+typedef enum {
+	PROGRESS,
+	ACTIVE,
+	INACTIVE,
+}connectionState;
+
+// this is used by server to maintain registered client list, where as client uses it to maintain active connections
 typedef struct {
 	int sockFd;
 	bool isServer;
-	bool isUsed;
+	connectionState state;
 	char hostName[32];
 	char ip_addr[32];
 	int listenPort;
@@ -55,7 +63,8 @@ public:
 
 	void addNodetoList(int sockfd, char *ipAddr, int port);
 	int sendall(int sockFd, char *buf, int *length);
-	void getHostName(char *ip, char *buf);
+	bool getHostName(char *ip, char *buf, bool printErr=true);
+	bool getIPaddress(char *host, char *buf, bool printErr=true);
 };
 
 #endif /* !COMMON_H */

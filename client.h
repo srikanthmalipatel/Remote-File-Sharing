@@ -33,18 +33,19 @@ private:
     char* m_ubEmail;
 
     // client utilites
-    int m_nListenPort;
-    char m_ipAddress[32];
+    int m_nListenPort;		// listening port of this client.
+    int m_nConnCount;		// active connections count
+    char m_ipAddress[32];	// host ipaddress in numbers and dot format.
     char m_srvIpAddress[32]; // this would no longer be required becz nodeList[0] contains server details.
-    char m_srvList[1024];	// this holds the updates sent by server when ever there is a new client has registered/terminated/exited
+    char m_srvList[1024];	// this holds the updates sent by server when ever there is a new client has registered/terminated/exited.
 
     // socket specific members
-	int m_nListenSd;        // listen socket descriptor
-	int m_nServerSd;		// socket used for connecting to the server, this is used when server sends client list updates
-	int m_nMaxFd;           // Maximum file descriptor number
-	fd_set m_masterSet;    // list which holds all the active connections including listening socket and stdin
-	fd_set m_readSet;      // list which is a copy of m_nMasterSet and is passed to select() call, since select() call changes the list we don't intend to change m_nMasterSet
-	struct sockaddr_in m_cliListenAddr; // this holds its address, port and family and this is bind() to listening socket
+	int m_nListenSd;        // listen socket descriptor.
+	int m_nServerSd;		// socket used for connecting to the server, this is used when server sends client list updates.
+	int m_nMaxFd;           // Maximum file descriptor number.
+	fd_set m_masterSet;    // list which holds all the active connections including listening socket and stdin.
+	fd_set m_readSet;      // list which is a copy of m_nMasterSet and is passed to select() call, since select() call changes the list we don't intend to change m_nMasterSet.
+	struct sockaddr_in m_cliListenAddr; // this holds its address, port and family and this is bind() to listening socket.
 
     // register
     bool m_bisRegistered;
@@ -66,6 +67,7 @@ private:
 	void command_creator();
 	void command_display();
 	int command_register(char *ipAddr, char *port);
+	void command_connect(char *ipAddr, char *port);
 	void command_list();
 	void command_terminate(int connectionId);
 	void command_quit();
