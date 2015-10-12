@@ -247,7 +247,7 @@ void Server::newConnectionHandler() {
 				break;
 			}
 		}
-		/*
+
 		// send REGISTER OK message to the client
 		memset(buffer, 0 ,sizeof(buffer));
 		strcat(buffer, "REGISTER OK");
@@ -258,7 +258,7 @@ void Server::newConnectionHandler() {
 			cout << "Message sending failed. Please retry" << endl;
 			return;
 		}
-		*/
+
 		// update all the clients with the new list
 		updateNodesinList();
 	}

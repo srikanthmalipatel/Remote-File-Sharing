@@ -65,7 +65,6 @@ void Client::eventHandler() {
         int bytesRead;
         char recvBuff[1024];
         for(int i=0; i<=m_nMaxFd; i++) {
-        	memset(recvBuff, 0, 1024);
             if(FD_ISSET(i, &m_readSet)) {
                 if(i == STDIN) {
                     commandShell();
@@ -79,22 +78,24 @@ void Client::eventHandler() {
                 	// server sends client list updates when ever a new client registers/terminates/quits
                 	if( (bytesRead = recv(i, recvBuff, sizeof(recvBuff), 0)) > 0) {
                 		recvBuff[strlen(recvBuff)]='\0';
-                		if(strstr(recvBuff, "UPDATE")) {
+                		// registration successful
+						if(strstr(recvBuff, "REGISTER OK")) {
+							cout << "Registration Successful. " << endl <<  " Updated List." << endl;
+							m_nodeList[0].state = ACTIVE;
+						}
+						// ** UPDATE REQUIRED ** check for cases in which registration is unsuccessful
+						if(strstr(recvBuff, "REGISTER FAIL")) {
+
+						}
+                		char *pos;
+                		if((pos = strstr(recvBuff, "UPDATE")) != NULL) {
                 			printf("Got Updated Server List \n");
-                			strcpy(m_srvList,recvBuff);
+                			strcpy(m_srvList,pos);
 							displayServerList();
 							cout << endl;
                 		}
-                		// registration successful
-                		if(strstr(recvBuff, "REGISTER OK")) {
-                			cout << "Registration Successful. " << endl <<  " Updated List." << endl;
-                			m_nodeList[0].state = ACTIVE;
-                		}
-                		// ** UPDATE REQUIRED ** check for cases in which registration is unsuccessful
-                		if(strstr(recvBuff, "REGISTER FAIL")) {
-
-                		}
                 	}
+                	memset(recvBuff, 0, 1024);
                 }
                 else {
                     // handle data from connected clients
@@ -124,6 +125,7 @@ void Client::eventHandler() {
 							}
                 		}
                 	}
+                	memset(recvBuff, 0, 1024);
                 }
             }
         }
