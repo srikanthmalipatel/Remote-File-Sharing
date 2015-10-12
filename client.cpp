@@ -76,9 +76,12 @@ void Client::eventHandler() {
                 	// server sends client list updates when ever a new client registers/terminates/quits
                 	if( (bytesRead = recv(i, recvBuff, sizeof(recvBuff), 0)) > 0)
                 	{
-                		printf("data received from server %s\n", recvBuff);
-                		recvBuff[bytesRead] = 0;
-                		//updateRegisteredClientList(recvBuff);
+                		printf("Got Updated Server List \n");
+                		recvBuff[strlen(recvBuff)]='\0';
+                		strcpy(m_srvList,recvBuff);
+                		displayServerList();
+                		cout << endl;
+                		memset(recvBuff, 0, 1024);
                 	}
                 }
                 else {
@@ -326,6 +329,26 @@ void Client::startListenClient() {
 
 void Client::newConnectionHandler() {
 	// yet to implement. complete this while implementing connect function
+}
+
+
+// this should also update local copy when ever server sends update
+void Client::displayServerList() {
+	for(int i=7;i<strlen(m_srvList);i++)
+	{
+		if(m_srvList[i]==' ')
+		{
+			cout<<"         ";
+		}
+		else if(m_srvList[i]=='|')
+		{
+			cout<<endl;
+		}
+		else
+		{
+			cout<<m_srvList[i];
+		}
+	}
 }
 
 /*****************************************************************************

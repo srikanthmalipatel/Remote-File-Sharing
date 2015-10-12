@@ -36,6 +36,7 @@ private:
     int m_nListenPort;
     char m_ipAddress[32];
     char m_srvIpAddress[32]; // this would no longer be required becz nodeList[0] contains server details.
+    char m_srvList[1024];	// this holds the updates sent by server when ever there is a new client has registered/terminated/exited
 
     // socket specific members
 	int m_nListenSd;        // listen socket descriptor
@@ -71,6 +72,7 @@ private:
 
 	void startListenClient();
 	void newConnectionHandler();
+	void displayServerList();
 
 	// utility functions
     char** parseLine(char *line, int &nArgs, const char *delim);

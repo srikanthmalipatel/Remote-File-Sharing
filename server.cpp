@@ -335,42 +335,42 @@ void Server::updateNodesinList() {
 	cout<<m_nodeList[m_nLatestIndex].ip_addr<<":"<<m_nodeList[m_nLatestIndex].listenPort<<" Registered Successfully. " << endl;
 	char msg[512]={0};
 	// constructing a message in format: UPDATE CL1.ip CL1.host CL1.port|CL2.ip CL2.host CL2.port|....
-	strcat(msg,"UPDATE ");
-	for(int i=0; i<10; i++)
-	{
-		if(m_nodeList[i].isUsed==true)
-		{
-			char port[4];
-			sprintf(port,"%d",m_nodeList[i].listenPort);
-			strcat(msg,m_nodeList[i].ip_addr);
-			strcat(msg," ");
-			strcat(msg,m_nodeList[i].hostName);
-			strcat(msg," ");
-			strcat(msg,port);
-			strcat(msg,"|");
-		}
-	}
-	// ****UPDATE REQUIRED ****
-	// send data about newly added client to already registered clients
-	// send all the data about existing clients to the newly registered clients
-	int length=sizeof(msg);
-	for(int i=0; i<10; i++)
-	{
-		if (m_nodeList[i].isUsed==true)
-		{
-			cout << "sending message to " << m_nodeList[i].sockFd << " " << msg <<endl;
-			if (sendall(m_nodeList[i].sockFd, msg, &length) == -1)
+	for(int j=0; j<10; j++) {
+		memset(msg, 0, sizeof(msg));
+		strcat(msg,"UPDATE ");
+
+		// sending data for all used nodes excluding details about it self
+		if(m_nodeList[j].isUsed==true) {
+			for(int i=0; i<10; i++)
 			{
-				cerr<<"Error Sending List Updates"<<endl;
-			}
-			else
-			{
-				if(length<sizeof(msg))
+				if(m_nodeList[i].isUsed==true && i!=j)
 				{
-					cout << "Only " << length << "bytes sent but msg size " << sizeof(msg) << endl;
+					char port[4];
+					sprintf(port,"%d",m_nodeList[i].listenPort);
+					strcat(msg,m_nodeList[i].ip_addr);
+					strcat(msg," ");
+					strcat(msg,m_nodeList[i].hostName);
+					strcat(msg," ");
+					strcat(msg,port);
+					strcat(msg,"|");
+				}
+			}
+			int length=sizeof(msg);
+			if(length>0) {
+				cout << "sending message to " << m_nodeList[j].sockFd << " " << msg <<endl;
+				if (sendall(m_nodeList[j].sockFd, msg, &length) == -1)
+				{
+					cerr<<"Error Sending List Updates"<<endl;
+				}
+				else
+				{
+					if(length<sizeof(msg))
+					{
+						cout << "Only " << length << "bytes sent but msg size " << sizeof(msg) << endl;
+					}
 				}
 			}
 		}
 	}
-	cout << "Client Added To List. "<<endl<<"List Update Sent."<<endl;
+	cout << "Updated List Sent to All Clients."<<endl;
 }
