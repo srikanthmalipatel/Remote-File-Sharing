@@ -79,6 +79,7 @@ void Client::eventHandler() {
                 	if( (bytesRead = recv(i, recvBuff, sizeof(recvBuff), 0)) > 0) {
                 		recvBuff[strlen(recvBuff)]='\0';
                 		// registration successful
+                		// FORMAT: REGISTER OK
 						if(strstr(recvBuff, "REGISTER OK")) {
 							cout << "Registration Successful. " << endl <<  " Updated List." << endl;
 							m_nodeList[0].state = ACTIVE;
@@ -87,6 +88,7 @@ void Client::eventHandler() {
 						if(strstr(recvBuff, "REGISTER FAIL")) {
 
 						}
+						// Received UPDATE message from server contaning list of
                 		char *pos;
                 		if((pos = strstr(recvBuff, "UPDATE")) != NULL) {
                 			printf("Got Updated Server List \n");
@@ -124,6 +126,26 @@ void Client::eventHandler() {
 								}
 							}
                 		}
+                		// Process PUT request
+                		// FORMAT: PUT <FILENAME> <FILESIZE>
+                		if(strstr(recvBuff, "PUT")) {
+                			cout << "Message: " << recvBuff << " from client " << m_nodeList[i].hostName << endl;
+                			strtok(recvBuff, " ");
+                			char *fileName = (char *) malloc(32);
+							strcpy(fileName, strtok(NULL, " "));
+							size_t fileSz = strtol(strtok(NULL, " "), NULL, 10);
+                			handle_get(i, fileName, fileSz);
+                		}
+                		// Process GET request.
+                		// FORMAT: GET FILE <FILENAME>
+                		if(strstr(recvBuff, "GET FILE")) {
+                			cout << "Message: " << recvBuff << " from client " << m_nodeList[i].hostName << endl;
+                			strtok(recvBuff, " ");
+                			strtok(NULL, " ");
+							char *fileName = (char *) malloc(32);
+							strcpy(fileName, strtok(NULL, " "));
+							handle_put(i, fileName);
+                		}
                 	}
                 	memset(recvBuff, 0, 1024);
                 }
@@ -140,7 +162,7 @@ void Client::eventHandler() {
  */
 void Client::commandShell() {
 	int nArgs;
-	char host[32], port[6];
+	char arg1[32], arg2[32], arg3[32];
 	char *commandLine = NULL;
 	size_t size;
 	// read the command from stdin
@@ -172,9 +194,9 @@ void Client::commandShell() {
 				break;
 			}
 
-			strcpy(host, strtok(NULL, " "));
-			strcpy(port, strtok(NULL, " "));
-			command_register(host, port);
+			strcpy(arg1, strtok(NULL, " "));
+			strcpy(arg2, strtok(NULL, " "));
+			command_register(arg1, arg2);
 			break;
 		case COMMAND_CONNECT:
 			if(!m_bisRegistered) {
@@ -185,16 +207,36 @@ void Client::commandShell() {
 				cout << "Connect Error: Maximum connections reached!" << endl;
 				break;
 			}
-			strcpy(host, strtok(NULL, " "));
-			strcpy(port, strtok(NULL, " "));
-			command_connect(host, port);
+			strcpy(arg1, strtok(NULL, " "));
+			strcpy(arg2, strtok(NULL, " "));
+			command_connect(arg1, arg2);
+			break;
+		case COMMAND_PUT:
+			if(!m_bisRegistered) {
+				cout << "PUT Error: Please register to the server first!" << endl;
+				break;
+			}
+			strcpy(arg1, strtok(NULL, " "));
+			strcpy(arg2, strtok(NULL, " "));
+			strcpy(arg3, strtok(NULL, " "));
+			command_put(arg1,arg2, arg3);
+			break;
+		case COMMAND_GET:
+			if(!m_bisRegistered) {
+				cout << "PUT Error: Please register to the server first!" << endl;
+				break;
+			}
+			strcpy(arg1, strtok(NULL, " "));
+			strcpy(arg2, strtok(NULL, " "));
+			strcpy(arg3, strtok(NULL, " "));
+			command_get(arg1,arg2, arg3);
 			break;
 		default:
 			displayUsage();
 			break;
 	}
-	memset(host, 0, sizeof(host));
-	memset(port, 0, sizeof(port));
+	memset(arg1, 0, sizeof(arg1));
+	memset(arg2, 0, sizeof(arg2));
 }
 
 /*
@@ -209,7 +251,9 @@ void Client::command_help() {
     printf("\tDIPSLAY - Displays the IP address and listening port of this process\n");
     printf("\tLIST - Displays a list of clients registered on this server\n");
     printf("\tREGISTER <server IP> <Port> - Registers with the server\n");
-    printf("\tCONNECT <IP/Hostname> <Port> - Connects to a client already registered with the server. *Note: Maximum connections: 3");
+    printf("\tCONNECT <IP/Hostname> <Port> - Connects to a client already registered with the server. *Note: Maximum connections: 3\n");
+    printf("\tPUT <CONNECTION ID> <FILE NAME> - Uploads the file to the specified peer\n");
+    printf("\tGET <CONNECTION ID> <FILE NAME> - Downloads the file to the specified peer\n");
     printf("\n");
 }
 
@@ -424,6 +468,60 @@ void Client::command_list() {
 }
 
 /*
+ * Function:    Command_put()
+ * Parameters:  id - connection ID, filename - file to upload
+ * Returns:     None
+ * Description: This function is used to upload a file to a particular connection
+ */
+void Client::command_put(char *id, char *port, char *filename) {
+	cout << "Processing PUT Request" << id << " " << port << endl;
+	// get the socket descriptor with respect to connection id or ip
+	int sockFd = -1;
+	for(int i=0; i<10; i++) {
+		if(m_nodeList[i].state == ACTIVE && (strcmp(m_nodeList[i].ip_addr, id) == 0) && m_nodeList[i].listenPort == atoi(port) ) {
+			cout << "Found socket descriptor" << endl;
+			sockFd = m_nodeList[i].sockFd;
+			break;
+		}
+	}
+	if(sockFd == -1) {
+		cout << "PUT Error: Please connect to the peer first!" << endl;
+		return;
+	}
+	handle_put(sockFd, filename, true);
+}
+
+/*
+ * Function:    Command_put()
+ * Parameters:  id - connection ID, filename - file to upload
+ * Returns:     None
+ * Description: This function is used to download a file to a particular connection
+ */
+void Client::command_get(char *id, char *port, char *filename) {
+	cout << "Processing GET Request" << id << " " << port << endl;
+	// get the socket descriptor with respect to connection id or ip
+	int sockFd = -1;
+	char buffer[BYTES512] = {0};
+	for(int i=0; i<10; i++) {
+		if(m_nodeList[i].state == ACTIVE && (strcmp(m_nodeList[i].ip_addr, id) == 0) && m_nodeList[i].listenPort == atoi(port) ) {
+			cout << "Found socket descriptor" << endl;
+			sockFd = m_nodeList[i].sockFd;
+			break;
+		}
+	}
+	if(sockFd == -1) {
+		cout << "PUT Error: Please connect to the peer first!" << endl;
+		return;
+	}
+	// send GET message
+	sprintf(buffer, "GET FILE %s", filename);
+	cout << "Sending Message: " << buffer << endl;
+	int nRead=sizeof(buffer);
+	sendall(sockFd, buffer, &nRead);
+	memset(buffer, 0, sizeof(buffer));
+}
+
+/*
  * Function:    Command_terminate(int connectionID)
  * Parameters:  int connectionId
  * Returns:     None
@@ -583,6 +681,130 @@ void Client::displayServerList() {
 	}
 }
 
+void Client::handle_put(int sockFd, char *filename, bool sendMsg) {
+	char buffer[BYTES512]={0};
+	struct timeval  begin, end;
+	size_t bytesRead = 0,bytesSent=0;
+	size_t fileSz, remBytes;
+
+	// check if the file exists, if so get file size
+	struct stat statbuf;
+	if(stat(filename, &statbuf) == -1) {
+		perror("PUT Error: stat");
+		return;
+	}
+	fileSz = statbuf.st_size;
+	remBytes = fileSz;
+
+	// open the file for reading
+	FILE *fp = fopen(filename, "rb");
+	if(fp == NULL) {
+		cout << "PUT Error: Failed to open file!" << endl;
+		return;
+	}
+
+
+
+	// send message to the peer informing of uploading file along with its size
+	// message format PUT <FILENAME> <SIZE>
+	sprintf(buffer, "PUT %s %lu", filename, fileSz);
+	cout << "sending msg " << buffer << endl;
+	int nRead=sizeof(buffer);
+	sendall(sockFd, buffer, &nRead);
+	memset(buffer, 0, sizeof(buffer));
+
+	// record the time when upload is starting
+	gettimeofday(&begin, NULL);
+	cout << "Upload Starting...!" << endl;
+	while(remBytes > 0)
+	{
+		int len;
+		if (remBytes >= BYTES512 )
+		{
+			bytesRead = fread(buffer, 1, BYTES512 , fp);
+			len=bytesRead;
+		}
+		else if (remBytes<BYTES512)
+		{
+			bytesRead = fread(buffer, 1, BYTES512-remBytes , fp);
+			len=bytesRead;
+		}
+		//cout << "sending bytes: " << bytesRead << endl;
+		int res=sendall(sockFd, buffer, &len);
+		if( res < 0)
+		{
+			cout<<"PUT Error: Failed to upload file!"<<endl;
+			remBytes=0;
+			break;
+		}
+		remBytes=remBytes-bytesRead;
+		memset(buffer, '0', sizeof(buffer));
+	}
+
+	// either there was an EOF or some error
+	if (remBytes == 0)
+	{
+		if (feof(fp)) {
+			fclose(fp);
+			//calculate the time taken for upload
+			gettimeofday(&end, NULL);
+			double uploadTime=1000 * (end.tv_sec - begin.tv_sec) + (end.tv_usec - begin.tv_usec) / 1000;
+			cout << "Transfer Successful " << uploadTime << " milliseconds" << endl;
+			return;
+		}
+		if (ferror(fp))
+			cout << "Put Error: error reading. Failed to Upload !\n" << endl;
+	}
+	return;
+}
+
+void Client::handle_get(int sockFd, char *fileName, size_t fileSz) {
+	struct timeval  start, end;
+	size_t bytesReceived = 0,bytesWritten=0;
+	char buff[BYTES512];
+	memset(buff, '0', sizeof(buff));
+	FILE *fp = fopen(fileName,"wb");
+
+	size_t bytesLeft = fileSz;
+	if(fp==NULL)
+	{
+		cerr<<"File Open Error";
+		return ;
+	}
+
+	cout<<"Starting to Download file  " << fileName << endl;
+	gettimeofday(&start, NULL);
+
+	/* Receive data in chunks of BUF_SIZE bytes */
+	while( bytesLeft > 0)
+	{
+		bytesReceived = recv(sockFd, buff, BYTES512, 0);
+		//cout << "recieved bytes: " << bytesReceived << endl;
+		bytesWritten = fwrite(buff,1,bytesReceived, fp);
+		//cout << "written bytes: " << bytesWritten << endl;
+		if(bytesWritten < bytesReceived)
+		{
+			cout<<"write failed."<<endl;
+		}
+		bytesLeft=bytesLeft-bytesWritten;
+		//cout << "bytesleft " << bytesLeft << endl;
+		memset(buff, '0', sizeof(buff));
+	}
+
+	if(bytesReceived < 0 || bytesReceived==0)
+	{
+		perror("recv");
+	}
+	else
+	{
+		cout<<"Download Complete"<<endl;
+		fclose(fp);
+		gettimeofday(&end, NULL);
+		double timeTaken=1000 * (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1000;
+		cout<<"Downloaded FILE:" << fileName << "in " << timeTaken/1000 << " ms"  <<endl;
+	}
+}
+
 /*****************************************************************************
  *                      Server utility functions                             *
  * **************************************************************************/
@@ -621,6 +843,10 @@ CommandID Client::getCommandID(char comnd[]) {
     	return COMMAND_REGISTER;
     else if(strcasecmp(comnd, "CONNECT") == 0)
     	return COMMAND_CONNECT;
+    else if(strcasecmp(comnd, "PUT") == 0)
+    	return COMMAND_PUT;
+    else if(strcasecmp(comnd, "GET") == 0)
+    	return COMMAND_GET;
     else
         return COMMAND_NONE;
 }

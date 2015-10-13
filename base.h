@@ -20,6 +20,8 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/time.h>
 
 using namespace std;
 
@@ -28,6 +30,7 @@ using namespace std;
 // macros for constants
 #define MAX_CREATOR_LEN 100
 #define STDIN 0
+#define BYTES512 512
 
 // all possible commands. update this when adding a new command
 typedef enum {
@@ -37,6 +40,8 @@ typedef enum {
     COMMAND_LIST,
 	COMMAND_REGISTER,
 	COMMAND_CONNECT,
+	COMMAND_PUT,
+	COMMAND_GET,
     COMMAND_NONE=-1,
 }CommandID;
 

@@ -69,12 +69,16 @@ private:
 	int command_register(char *ipAddr, char *port);
 	void command_connect(char *ipAddr, char *port);
 	void command_list();
+	void command_put(char *id, char *port, char *filename);
+	void command_get(char *id, char *port, char *filename);
 	void command_terminate(int connectionId);
 	void command_quit();
 
 	void startListenClient();
 	void newConnectionHandler();
 	void displayServerList();
+	void handle_put(int sockFd, char *fileName, bool sendMsg=true);
+	void handle_get(int sockFd, char *fileName, size_t fileSz);
 
 	// utility functions
     char** parseLine(char *line, int &nArgs, const char *delim);
