@@ -23,6 +23,7 @@ Client::Client(int port) {
     this->m_nListenPort = port;
     this->m_bisRegistered = false;
     this->m_nConnCount = 0;
+    this->m_bInSync = false;
 
     // initalize nodeList and its tracker
     this->m_nLatestIndex = 0;
@@ -96,6 +97,11 @@ void Client::eventHandler() {
 							displayServerList();
 							cout << endl;
                 		}
+                		// Received SYNC message from server
+                		if(strstr(recvBuff,"SYNC")) {
+							cout << "Message: " << recvBuff << " from client " << m_nodeList[i].hostName << endl;
+							//command_sync();
+						}
                 	}
                 	memset(recvBuff, 0, 1024);
                 }
@@ -106,6 +112,7 @@ void Client::eventHandler() {
 
                 		// If it is a CONNECT OK message from the peer the update clientList and also increase connection count
                 		if(strstr(recvBuff, "CONNECT OK") != NULL) {
+                			cout << "Message: " << recvBuff << " from client " << m_nodeList[i].hostName << endl;
                 			for(int j=0; j<10; j++) {
                 				if(m_nodeList[j].sockFd == i) {
                 					cout << "Connection Successful with peer " << m_nodeList[j].ip_addr << " " << m_nodeList[j].listenPort << endl;
@@ -116,6 +123,7 @@ void Client::eventHandler() {
                 		}
                 		// If a peer refuses connection
                 		if(strstr(recvBuff, "CONNECT FAIL") != NULL) {
+                			cout << "Message: " << recvBuff << " from client " << m_nodeList[i].hostName << endl;
                 			strtok(recvBuff, " ");
                 			for(int j=0; j<10; j++) {
 								if(m_nodeList[j].sockFd == i) {
@@ -170,6 +178,11 @@ void Client::commandShell() {
 	commandLine[linelen-1] = '\0';
 	if(strlen(commandLine) == 0)
 		return;
+
+	char *argLine = (char *)malloc(strlen(commandLine));
+	strcpy(argLine, commandLine);
+	nArgs = getArgCount(argLine, " ");
+
 	CommandID command_id = getCommandID(strtok(commandLine, " "));
 	switch(command_id) {
 		case COMMAND_HELP:
@@ -188,6 +201,10 @@ void Client::commandShell() {
 			command_list();
 			break;
 		case COMMAND_REGISTER:
+			if(nArgs != 3) {
+				displayUsage();
+				break;
+			}
 			// if the server is not yet registered and if the number of arguments is same as expected.
 			if(m_bisRegistered) {
 				cout << "Register Error: Client has already been registered to the Server. Please do not try again!" << endl;
@@ -199,6 +216,10 @@ void Client::commandShell() {
 			command_register(arg1, arg2);
 			break;
 		case COMMAND_CONNECT:
+			if(nArgs != 3) {
+				displayUsage();
+				break;
+			}
 			if(!m_bisRegistered) {
 				cout << "Connect Error: Please register to the server first!" << endl;
 				break;
@@ -212,6 +233,10 @@ void Client::commandShell() {
 			command_connect(arg1, arg2);
 			break;
 		case COMMAND_PUT:
+			if(nArgs != 4) {
+				displayUsage();
+				break;
+			}
 			if(!m_bisRegistered) {
 				cout << "PUT Error: Please register to the server first!" << endl;
 				break;
@@ -222,6 +247,10 @@ void Client::commandShell() {
 			command_put(arg1,arg2, arg3);
 			break;
 		case COMMAND_GET:
+			if(nArgs != 4) {
+				displayUsage();
+				break;
+			}
 			if(!m_bisRegistered) {
 				cout << "PUT Error: Please register to the server first!" << endl;
 				break;
@@ -230,6 +259,13 @@ void Client::commandShell() {
 			strcpy(arg2, strtok(NULL, " "));
 			strcpy(arg3, strtok(NULL, " "));
 			command_get(arg1,arg2, arg3);
+			break;
+		case COMMAND_SYNC:
+			if(!m_bisRegistered) {
+				cout << "PUT Error: Please register to the server first!" << endl;
+				break;
+			}
+			command_sync();
 			break;
 		default:
 			displayUsage();
@@ -254,6 +290,7 @@ void Client::command_help() {
     printf("\tCONNECT <IP/Hostname> <Port> - Connects to a client already registered with the server. *Note: Maximum connections: 3\n");
     printf("\tPUT <CONNECTION ID> <FILE NAME> - Uploads the file to the specified peer\n");
     printf("\tGET <CONNECTION ID> <FILE NAME> - Downloads the file to the specified peer\n");
+    printf("\tSYNC - Synchronizes all registered peers with the files on connected peer list\n");
     printf("\n");
 }
 
@@ -522,6 +559,24 @@ void Client::command_get(char *id, char *port, char *filename) {
 }
 
 /*
+ * Function:    Command_sync()
+ * Parameters:  None
+ * Returns:     None
+ * Description: Propagates sync to all connected peers and uploads its files on to connected peers
+ */
+void Client::command_sync() {
+	cout << "Processing Sync Command " << endl;
+	// send sync message to the server so that it propagates the message to all registered clients
+	char buffer[64];
+	sprintf(buffer, "SYNC");
+	int nRead=sizeof(buffer);
+	//cout << "sending sync message to " << m_nodeList[i].listenPort << endl;
+	sendall(m_nodeList[0].sockFd, buffer, &nRead);
+	if(!m_bInSync)
+		m_bInSync = true;
+}
+
+/*
  * Function:    Command_terminate(int connectionID)
  * Parameters:  int connectionId
  * Returns:     None
@@ -691,6 +746,7 @@ void Client::handle_put(int sockFd, char *filename, bool sendMsg) {
 	struct stat statbuf;
 	if(stat(filename, &statbuf) == -1) {
 		perror("PUT Error: stat");
+
 		return;
 	}
 	fileSz = statbuf.st_size;
@@ -809,19 +865,14 @@ void Client::handle_get(int sockFd, char *fileName, size_t fileSz) {
  *                      Server utility functions                             *
  * **************************************************************************/
 
-char** Client::parseLine(char *line, int &nArgs, const char *delim) {
-	char **tokens = (char **) malloc(10*sizeof(char *));
+int Client::getArgCount(char *line, const char *delim) {
 	char *tok = strtok(line, delim);
-	nArgs = 0;
+	int nArgs = 0;
 	while(tok!=NULL) {
-		//printf("tok %s \n", tok);
-		tokens[nArgs] = (char *) malloc(sizeof(strlen(tok)*sizeof(char)));
-		strcpy(tokens[nArgs], tok);
-		//printf("tokens[%d] = %s \n", nArgs, tokens[nArgs]);
-		tok = strtok(NULL, delim);
 		nArgs++;
+		tok = strtok(NULL, delim);
 	}
-	return tokens;
+	return nArgs;
 }
 
 /*
@@ -847,6 +898,8 @@ CommandID Client::getCommandID(char comnd[]) {
     	return COMMAND_PUT;
     else if(strcasecmp(comnd, "GET") == 0)
     	return COMMAND_GET;
+    else if(strcasecmp(comnd, "SYNC") == 0)
+    	return COMMAND_SYNC;
     else
         return COMMAND_NONE;
 }

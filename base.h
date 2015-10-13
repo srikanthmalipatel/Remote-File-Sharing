@@ -42,6 +42,7 @@ typedef enum {
 	COMMAND_CONNECT,
 	COMMAND_PUT,
 	COMMAND_GET,
+	COMMAND_SYNC,
     COMMAND_NONE=-1,
 }CommandID;
 

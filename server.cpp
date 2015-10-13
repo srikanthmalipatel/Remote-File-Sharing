@@ -82,6 +82,23 @@ void Server::eventHandler() {
                 }
                 else {
                     // handle data from existing client
+
+                	// process SYNC message
+                	char recvBuff[1024] = {0};
+                	int bytesRead;
+                	if( (bytesRead = recv(i, recvBuff, sizeof(recvBuff), 0)) > 0) {
+                		recvBuff[strlen(recvBuff)] = 0;
+                		if(strstr(recvBuff, "SYNC")) {
+                			cout << "Received Message: " << recvBuff << "from client" << endl;
+                			// update this message to all connected clients
+                			for(int i=0; i<10; i++) {
+                				if(m_nodeList[i].state == ACTIVE) {
+                					sendall(m_nodeList[i].sockFd, recvBuff, &bytesRead);
+                				}
+                			}
+                		}
+                	}
+                	// if bytesRead=0 then terminate connection
                 }
 
             }
