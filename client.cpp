@@ -426,6 +426,7 @@ int Client::command_register(char *ipAddr, char *port) {
  * Description: Connects to a clients registered with server. Maximum connections are 3
  */
 void Client::command_connect(char *ipOrHost, char *port) {
+	struct sockaddr_in peerAddr;
 		char peerHostName[32], peerIpAddr[32];
 		int peerPort = atoi(port);
 		int peerSd;
@@ -463,37 +464,25 @@ void Client::command_connect(char *ipOrHost, char *port) {
 			return;
 		}
 
-		struct addrinfo hints, *p, *servInfo;
-		int res;
-		memset(&hints, 0, sizeof hints);
-		hints.ai_family = AF_UNSPEC;
-		hints.ai_socktype = SOCK_STREAM;
-		if ((res = getaddrinfo(peerIpAddr, port, &hints, &servInfo)) != 0)
-		{
-			cerr<<"Error Connecting. getaddrinfo() Failed. Exiting. "<<endl;
-			cerr<<gai_strerror(res);
+		// create a socket and connect to the peer
+		memset(&peerAddr, 0, sizeof(peerAddr));
+		peerAddr.sin_family = AF_INET;
+		peerAddr.sin_port = htons(peerPort);
+
+		if(inet_pton(AF_INET, peerIpAddr, &peerAddr.sin_addr) != 1) {
+			perror("[command_register] inet_pton");
+			displayUsage();
+		}
+		if((peerSd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+			perror("Connect Error: socket");
 			return;
 		}
+		if( connect(peerSd, (struct sockaddr *)&peerAddr, sizeof(peerAddr)) < 0) {
+			perror("Connect Error: connect");
+			return;
 
-		for(p = servInfo; p != NULL; p = p->ai_next)
-		{
-			if ((peerSd = socket(p->ai_family, p->ai_socktype,p->ai_protocol)) == -1)
-			{
-				cout << "Connect Error: Not a Valid Peer"<<endl;
-				continue;
-			}
-			if ((res=connect(peerSd, p->ai_addr, p->ai_addrlen)) == -1)
-			{
-				close(peerSd);
-				cerr<<"Connect Error: Not a Valid Peer"<<endl;
-				continue;
-			}
-			break;
 		}
-		if (p == NULL)
-		{
-			cout <<"Connect Error: Not a Valid Peer";
-		}
+
 		// construct CONNECT message
 		char msg[64] = {0};
 		strcat(msg, "CONNECT ");
@@ -746,10 +735,10 @@ void Client::newConnectionHandler() {
 	inet_ntop(AF_INET, &remoteaddr.sin_addr, remoteIP, 32);
 
 	// if this client is not registered or max connections have been reached then send fail message and close connection
-	char buffer[1024];
+	char buffer[1024] = {0};
 	if(!m_bisRegistered || m_nConnCount >= 3) {
 		cout << "connection refused " << endl;
-		strcat(buffer, "CONNECT FAIL");
+		sprintf(buffer, "CONNECT FAIL");
 		if(!m_bisRegistered)
 			strcat(buffer, " Not yet registered. Please try later!");
 		else
