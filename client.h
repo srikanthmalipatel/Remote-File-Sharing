@@ -73,8 +73,8 @@ private:
 	void command_connect(char *ipAddr, char *port);
 	void command_list();
 	void command_terminate(int id);
-	void command_put(char *id, char *port, char *filename);
-	void command_get(char *id, char *port, char *filename);
+	void command_put(int id, char *filename);
+	void command_get(int id, char *filename);
 	void command_sync();
 	void command_quit();
 

@@ -26,7 +26,7 @@ Client::Client(int port) {
     this->m_bInSync = false;
 
     // initalize nodeList and its tracker
-    this->m_nLatestIndex = 0;
+    this->m_nLatestIndex = 1;
     for(int i=0; i<10; i++)
 	{
     	m_nodeList[i].id = i+1;
@@ -112,18 +112,19 @@ void Client::eventHandler() {
                 		recvBuff[strlen(recvBuff)]='\0';
 
                 		// If it is a CONNECT OK message from the peer the update clientList and also increase connection count
-                		if(strstr(recvBuff, "CONNECT OK") != NULL) {
-                			cout << "Message: " << recvBuff << " from client " << m_nodeList[i].hostName << endl;
+                		if(strcmp(recvBuff, "CONNECT OK") == 0) {
                 			for(int j=0; j<10; j++) {
-                				if(m_nodeList[j].sockFd == i) {
-                					cout << "Connection Successful with peer " << m_nodeList[j].ip_addr << " " << m_nodeList[j].listenPort << endl;
+                				if(m_nodeList[j].sockFd == i && m_nodeList[j].state == PROGRESS) {
+                					cout << "Message: " << recvBuff << " from client " << m_nodeList[j].hostName << endl;
+                					cout << "Connection Successful with peer " << m_nodeList[j].ip_addr << " " << m_nodeList[j].listenPort << endl << endl;
                 					m_nodeList[j].state = ACTIVE;
                 				}
                 			}
                 			m_nConnCount++;
+                			memset(recvBuff, 0, sizeof(recvBuff));
                 		}
                 		// If a peer refuses connection
-                		if(strstr(recvBuff, "CONNECT FAIL") != NULL) {
+                		else if(strstr(recvBuff, "CONNECT FAIL") != NULL) {
                 			cout << "Message: " << recvBuff << " from client " << m_nodeList[i].hostName << endl;
                 			strtok(recvBuff, " ");
                 			for(int j=0; j<10; j++) {
@@ -132,12 +133,13 @@ void Client::eventHandler() {
 									cout << "Reason: " << recvBuff+12 << endl;
 									cout << endl;
 									m_nodeList[j].state = INACTIVE;
+									break;
 								}
 							}
                 		}
                 		// Process PUT request
                 		// FORMAT: PUT <FILENAME> <FILESIZE>
-                		if(strstr(recvBuff, "PUT")) {
+                		else if(strstr(recvBuff, "PUT")) {
                 			cout << "Message: " << recvBuff << " from client " << m_nodeList[i].hostName << endl;
                 			strtok(recvBuff, " ");
                 			char *fileName = (char *) malloc(32);
@@ -147,7 +149,7 @@ void Client::eventHandler() {
                 		}
                 		// Process GET request.
                 		// FORMAT: GET FILE <FILENAME>
-                		if(strstr(recvBuff, "GET FILE")) {
+                		else if(strstr(recvBuff, "GET FILE")) {
                 			cout << "Message: " << recvBuff << " from client " << m_nodeList[i].hostName << endl;
                 			strtok(recvBuff, " ");
                 			strtok(NULL, " ");
@@ -156,18 +158,13 @@ void Client::eventHandler() {
 							handle_put(i, fileName);
                 		}
                 		// Recieved SYNC start message from clients
-                		if(strstr(recvBuff,"SYNC START")) {
+                		else if(strcmp(recvBuff,"SYNC START") == 0) {
 							cout << "Message: " << recvBuff << " from client " << m_nodeList[i].hostName << endl;
 							start_sync();
 						}
                 		// Recieved TERMINATE message from peer
-                		if(strstr(recvBuff,"TERMINATE")) {
+                		else if(strcmp(recvBuff,"TERMINATE") == 0) {
                 			cout << "Message: " << recvBuff << " from client " << m_nodeList[i].hostName << endl;
-                			// send terminate OK message
-                			memset(recvBuff, 0, sizeof(recvBuff));
-                			sprintf(recvBuff, "TERMINATE OK");
-                			int len = sizeof(recvBuff);
-                			sendall(i, recvBuff, &len);
                 			// find the index associated with this socket id
                 			for(int j=0; j<10; j++) {
                 				if(m_nodeList[j].sockFd == i)
@@ -190,7 +187,7 @@ void Client::eventHandler() {
  * Description: This functions behaves like shell answering all user commands
  */
 void Client::commandShell() {
-	int nArgs;
+	int nArgs, connId;
 	char arg1[32], arg2[32], arg3[32];
 	char *commandLine = NULL;
 	size_t size;
@@ -264,7 +261,7 @@ void Client::commandShell() {
 			command_connect(arg1, arg2);
 			break;
 		case COMMAND_PUT:
-			if(nArgs != 4) {
+			if(nArgs != 3) {
 				displayUsage();
 				break;
 			}
@@ -272,13 +269,12 @@ void Client::commandShell() {
 				cout << "PUT Error: Please register to the server first!" << endl;
 				break;
 			}
-			strcpy(arg1, strtok(NULL, " "));
+			connId = strtol(strtok(NULL, " "), NULL, 10);
 			strcpy(arg2, strtok(NULL, " "));
-			strcpy(arg3, strtok(NULL, " "));
-			command_put(arg1,arg2, arg3);
+			command_put(connId, arg2);
 			break;
 		case COMMAND_GET:
-			if(nArgs != 4) {
+			if(nArgs != 3) {
 				displayUsage();
 				break;
 			}
@@ -286,10 +282,9 @@ void Client::commandShell() {
 				cout << "PUT Error: Please register to the server first!" << endl;
 				break;
 			}
-			strcpy(arg1, strtok(NULL, " "));
+			connId = strtol(strtok(NULL, " "), NULL, 10);
 			strcpy(arg2, strtok(NULL, " "));
-			strcpy(arg3, strtok(NULL, " "));
-			command_get(arg1,arg2, arg3);
+			command_get(connId, arg2);
 			break;
 		case COMMAND_SYNC:
 			if(!m_bisRegistered) {
@@ -402,18 +397,18 @@ int Client::command_register(char *ipAddr, char *port) {
 		cout << "REGISTER message Sent. Waiting for Updated Client List from server" << endl;
 
 		// update server details with the first unused nodeList
-		for(int i=0; i<10; i++) {
-			if(m_nodeList[i].state == INACTIVE) {
-				m_nodeList[i].sockFd = m_nServerSd;
-				m_nodeList[i].state = PROGRESS;
-				m_nodeList[i].isServer = true;
-				m_nodeList[i].listenPort = srvPort;
-				strcpy(m_nodeList[i].ip_addr, m_srvIpAddress);
-				getHostName(m_nodeList[i].ip_addr, m_nodeList[i].hostName);
-				m_nLatestIndex = i;
-				break;
-			}
-		}
+		//for(int i=0; i<10; i++) {
+			//if(m_nodeList[i].state == INACTIVE) {
+				m_nodeList[0].id = 1;
+				m_nodeList[0].sockFd = m_nServerSd;
+				m_nodeList[0].state = PROGRESS;
+				m_nodeList[0].isServer = true;
+				m_nodeList[0].listenPort = srvPort;
+				strcpy(m_nodeList[0].ip_addr, m_srvIpAddress);
+				getHostName(m_nodeList[0].ip_addr, m_nodeList[0].hostName);
+
+			//}
+		//}
 
 		// adding this socket to masterset so that client can update nodeList when server sends messages on new client registration or termination/exit.
 		FD_SET(m_nServerSd, &m_masterSet);
@@ -514,7 +509,9 @@ void Client::command_connect(char *ipOrHost, char *port) {
 					strcpy(m_nodeList[i].ip_addr, peerIpAddr);
 					strcpy(m_nodeList[i].hostName, peerHostName);
 					//getHostName(m_nodeList[i].ip_addr, m_nodeList[i].hostName);
-					m_nLatestIndex = i;
+					m_nodeList[i].id = m_nLatestIndex+1;
+					m_nLatestIndex += 1;
+					cout << "Adding node " << m_nodeList[i].listenPort << " and socket " << m_nodeList[i].sockFd << endl;
 					break;
 				}
 			}
@@ -534,11 +531,12 @@ void Client::command_connect(char *ipOrHost, char *port) {
  */
 void Client::command_list() {
     // Complete this
-	printf("%-5s%-35s%-20s%-8s \n", "ID", "HOSTNAME", "IP ADDRESS", "PORT");
+	printf("%-5s%-35s%-20s%-8s%-8s\n", "ID", "HOSTNAME", "IP ADDRESS", "PORT", "SOCKET");
 	for(int i=0; i<10; i++) {
 		if(m_nodeList[i].state == ACTIVE)
-			printf("%-5d%-35s%-20s%-8d \n", m_nodeList[i].id, m_nodeList[i].hostName, m_nodeList[i].ip_addr, m_nodeList[i].listenPort);
+			printf("%-5d%-35s%-20s%-8d%-8d \n", m_nodeList[i].id, m_nodeList[i].hostName, m_nodeList[i].ip_addr, m_nodeList[i].listenPort, m_nodeList[i].sockFd);
 	}
+	cout << endl;
 }
 
 
@@ -553,6 +551,11 @@ void Client::command_terminate(int id) {
 		cout << "TERMINATE Error: No connected peers! ignoring this command" << endl;
 		return;
 	}
+	if(id == 1) {
+		cout << "TERMINATE Error: Cannot terminate connection with server. Please use EXIT command" << endl;
+		return;
+	}
+
 	int sockFd = -1, i, size;
 	// get socket associated with this id
 	for(i=0; i<10; i++) {
@@ -560,11 +563,8 @@ void Client::command_terminate(int id) {
 			cout << "TERMINATE Error: Please enter a valid connection ID. Type LIST to see active connections" << endl;
 			return;
 		}
-		else if(m_nodeList[i].id == id && i == 0) {
-			cout << "TERMINATE Error: Cannot terminate connection with server. Please use EXIT command" << endl;
-			return;
-		}
 		else if(m_nodeList[i].id == id) {
+			cout << "Found Socket with connection ID " << m_nodeList[i].id << endl;
 			sockFd = m_nodeList[i].sockFd;
 			break;
 		}
@@ -573,21 +573,18 @@ void Client::command_terminate(int id) {
 		cout << "TERMINATE Error: Please enter a valid connection ID. Type LIST to see active connections" << endl;
 		return;
 	}
-	cout << "TERMINATING connection with peer " << m_nodeList[i].hostName << endl;
+	cout << "TERMINATING connection with peer " << m_nodeList[i].hostName << " " << m_nodeList[i].listenPort << " " << m_nodeList[i].sockFd << endl;
 	// send Terminate message to the peer
-	char buf[32] = {0};
+	char buf[1024] = {0};
 	sprintf(buf, "TERMINATE");
 	size = sizeof(buf);
-	sendall(sockFd, buf, &size);
-
-	// recv Terminate OK message from the peer
-	memset(buf, 0, sizeof buf);
-	int bytesReceived = recv(sockFd, buf, sizeof buf, 0);
-	buf[strlen(buf)] = 0;
-	if(strstr(buf, "TERMINATE OK")) {
-		handle_terminate(i);
+	if(sendall(sockFd, buf, &size) != 0) {
+		cout << "Total Bytes Sent " << size;
+		cout << "TERMINATE Error: send failed" << endl;
+		return;
 	}
-
+	cout << "removing entry " << m_nodeList[i].id << " " << m_nodeList[i].sockFd << " " << m_nodeList[i].listenPort << " " << m_nodeList[i].state << endl;
+	handle_terminate(i);
 }
 
 /*
@@ -596,12 +593,18 @@ void Client::command_terminate(int id) {
  * Returns:     None
  * Description: This function is used to upload a file to a particular connection
  */
-void Client::command_put(char *id, char *port, char *filename) {
-	cout << "Processing PUT Request" << id << " " << port << endl;
-	// get the socket descriptor with respect to connection id or ip
+void Client::command_put(int id, char *filename) {
+	cout << "Processing PUT Request to connection " << id << endl;
+	// check if id = 1, then we cannot exchange files with server
+	if(id == 1) {
+		cout << "Put Error: Cannot Exchange files with the server" << endl;
+		return;
+	}
+
+	// get the socket descriptor with respect to connection id
 	int sockFd = -1;
 	for(int i=0; i<10; i++) {
-		if(m_nodeList[i].state == ACTIVE && (strcmp(m_nodeList[i].ip_addr, id) == 0) && m_nodeList[i].listenPort == atoi(port) ) {
+		if(m_nodeList[i].state == ACTIVE && m_nodeList[i].id == id) {
 			cout << "Found socket descriptor" << endl;
 			sockFd = m_nodeList[i].sockFd;
 			break;
@@ -620,13 +623,19 @@ void Client::command_put(char *id, char *port, char *filename) {
  * Returns:     None
  * Description: This function is used to download a file to a particular connection
  */
-void Client::command_get(char *id, char *port, char *filename) {
-	cout << "Processing GET Request" << id << " " << port << endl;
-	// get the socket descriptor with respect to connection id or ip
+void Client::command_get(int id, char *filename) {
+	cout << "Processing GET Request from connection " << id << endl;
+	// check if id = 1, then we cannot exchange files with server
+	if(id == 1) {
+		cout << "GET Error: Cannot Exchange files with the server" << endl;
+		return;
+	}
+
+	// get the socket descriptor with respect to connection id
 	int sockFd = -1;
 	char buffer[BYTES512] = {0};
 	for(int i=0; i<10; i++) {
-		if(m_nodeList[i].state == ACTIVE && (strcmp(m_nodeList[i].ip_addr, id) == 0) && m_nodeList[i].listenPort == atoi(port) ) {
+		if(m_nodeList[i].state == ACTIVE && m_nodeList[i].id == id ) {
 			cout << "Found socket descriptor" << endl;
 			sockFd = m_nodeList[i].sockFd;
 			break;
@@ -758,16 +767,20 @@ void Client::newConnectionHandler() {
 		strtok(buffer," ");
 		char *port=strtok(NULL," ");
 		// find the first unused node and update the peer details
+		int id;
 		for(int i=0; i<10; i++) {
 			if(m_nodeList[i].state == INACTIVE) {
+				m_nodeList[i].id = m_nLatestIndex+1;
 				m_nodeList[i].state=ACTIVE;
 				m_nodeList[i].listenPort =strtol(port, NULL, 10);
 				m_nodeList[i].sockFd = newConnSd;
 				strcpy(m_nodeList[i].ip_addr,remoteIP);
 				getHostName(m_nodeList[i].ip_addr, m_nodeList[i].hostName);
-				m_nLatestIndex = i;
+				m_nLatestIndex += 1;
+				cout << "Added node " << m_nodeList[i].listenPort << " with socket " << m_nodeList[i].sockFd << endl;
 				break;
 			}
+			id = m_nodeList[i].id;
 			m_nConnCount++;
 		}
 	}
@@ -776,7 +789,7 @@ void Client::newConnectionHandler() {
 	// send CONNECT OK message indicating successful connection between peers
 	memset(buffer, 0, sizeof(buffer));
 	strcat(buffer, "CONNECT OK");
-	cout << "Sending Message " << buffer << " to peer " << remoteIP << endl;
+	cout << "Sending Message " << buffer << " to peer " << remoteIP << endl << endl;
 
 	int len = strlen(buffer);
 	if(sendall(newConnSd, buffer, &len) == -1) {
@@ -951,6 +964,7 @@ void Client::start_sync() {
 
 void Client::handle_terminate(int Ix) {
 	// mark the node being terminated as unused and close socket
+	cout << "closing socket " << m_nodeList[Ix].sockFd << " and marking index " << Ix << " as Inactive" << endl;
 	m_nodeList[Ix].state = INACTIVE;
 	// reorder the nodes as per id
 	reorderNodeList(Ix);
@@ -968,11 +982,14 @@ void Client::handle_terminate(int Ix) {
 void Client::reorderNodeList(int Ix) {
 	for(int i=Ix+1; i<10; i++) {
 		if(m_nodeList[i].state == ACTIVE) {
-			m_nodeList[i].id -= 1;
 			m_nodeList[i-1] = m_nodeList[i];
 			m_nodeList[i].state = INACTIVE;
 		}
 	}
+	for(int i=0; i<10; i++) {
+		m_nodeList[i].id = i+1;
+	}
+	m_nLatestIndex--;
 }
 
 /*****************************************************************************
