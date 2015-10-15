@@ -73,7 +73,6 @@ void Client::eventHandler() {
                 }
                 else if(i == m_nListenSd) {
                     // new connection
-                	if(m_bisRegistered && m_nConnCount < 3)
                 		newConnectionHandler();
                 }
                 else if(i == m_nServerSd) {
@@ -124,7 +123,7 @@ void Client::eventHandler() {
                 			memset(recvBuff, 0, sizeof(recvBuff));
                 		}
                 		// If a peer refuses connection
-                		else if(strstr(recvBuff, "CONNECT FAIL") != NULL) {
+                		else if(strcmp(recvBuff, "CONNECT FAIL") == 0) {
                 			cout << "Message: " << recvBuff << " from client " << m_nodeList[i].hostName << endl;
                 			strtok(recvBuff, " ");
                 			for(int j=0; j<10; j++) {
@@ -370,13 +369,13 @@ int Client::command_register(char *ipAddr, char *port) {
 	if((m_nServerSd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
 	{
 		perror("socket");
-		exit(EXIT_FAILURE);
+		return 0;
 	}
 
 	if( connect(m_nServerSd, (struct sockaddr *)&srvAddr, sizeof(srvAddr)) < 0)
 	{
 		perror("connect");
-		exit(EXIT_FAILURE);
+		return 0;
 	}
 
 	// construct register message
@@ -391,6 +390,7 @@ int Client::command_register(char *ipAddr, char *port) {
 	int len = strlen(msg);
 	if(sendall(m_nServerSd, msg, &len) == -1) {
 		cout << "Message sending failed. Please retry" << endl;
+		return 0;
 	}
 	else {
 		m_bisRegistered = true;
@@ -416,7 +416,7 @@ int Client::command_register(char *ipAddr, char *port) {
 			m_nMaxFd = m_nServerSd;
 	}
 
-	return 0;
+	return 1;
 }
 
 /*
@@ -426,7 +426,6 @@ int Client::command_register(char *ipAddr, char *port) {
  * Description: Connects to a clients registered with server. Maximum connections are 3
  */
 void Client::command_connect(char *ipOrHost, char *port) {
-		struct sockaddr_in peerAddr;
 		char peerHostName[32], peerIpAddr[32];
 		int peerPort = atoi(port);
 		int peerSd;
@@ -464,25 +463,36 @@ void Client::command_connect(char *ipOrHost, char *port) {
 			return;
 		}
 
-
-		// create socket and initate connection
-		memset(&peerAddr, 0, sizeof(peerAddr));
-		peerAddr.sin_family = AF_INET;
-		peerAddr.sin_port = htons(peerPort);
-
-		if(inet_pton(AF_INET, peerIpAddr, &peerAddr.sin_addr) != 1) {
-			perror("[command_register] inet_pton");
-			displayUsage();
-		}
-		if((peerSd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+		struct addrinfo hints, *p, *servInfo;
+		int res;
+		memset(&hints, 0, sizeof hints);
+		hints.ai_family = AF_UNSPEC;
+		hints.ai_socktype = SOCK_STREAM;
+		if ((res = getaddrinfo(peerIpAddr, port, &hints, &servInfo)) != 0)
 		{
-			perror("Connect Error: socket");
+			cerr<<"Error Connecting. getaddrinfo() Failed. Exiting. "<<endl;
+			cerr<<gai_strerror(res);
 			return;
 		}
-		if( connect(peerSd, (struct sockaddr *)&peerAddr, sizeof(peerAddr)) < 0)
+
+		for(p = servInfo; p != NULL; p = p->ai_next)
 		{
-			perror("Connect Error: connect");
-			return;
+			if ((peerSd = socket(p->ai_family, p->ai_socktype,p->ai_protocol)) == -1)
+			{
+				cout << "Connect Error: Not a Valid Peer"<<endl;
+				continue;
+			}
+			if ((res=connect(peerSd, p->ai_addr, p->ai_addrlen)) == -1)
+			{
+				close(peerSd);
+				cerr<<"Connect Error: Not a Valid Peer"<<endl;
+				continue;
+			}
+			break;
+		}
+		if (p == NULL)
+		{
+			cout <<"Connect Error: Not a Valid Peer";
 		}
 		// construct CONNECT message
 		char msg[64] = {0};
@@ -752,6 +762,7 @@ void Client::newConnectionHandler() {
 			return;
 		}
 		close(newConnSd);
+		return;
 	}
 
 	// process CONNECT message from client
@@ -966,8 +977,6 @@ void Client::handle_terminate(int Ix) {
 	// mark the node being terminated as unused and close socket
 	cout << "closing socket " << m_nodeList[Ix].sockFd << " and marking index " << Ix << " as Inactive" << endl;
 	m_nodeList[Ix].state = INACTIVE;
-	// reorder the nodes as per id
-	reorderNodeList(Ix);
 	close(m_nodeList[Ix].sockFd);
 	// remove this socket from master set and update Max file descriptor.
 	FD_CLR(m_nodeList[Ix].sockFd, &m_masterSet);
@@ -975,7 +984,12 @@ void Client::handle_terminate(int Ix) {
 	{
 		m_nMaxFd--;
 	}
+	m_nodeList[Ix].sockFd = -1;
 	m_nConnCount--;
+
+	// reorder the nodes as per id
+	reorderNodeList(Ix);
+
 	cout << "Connection TERMINATED Successfully" << endl;
 }
 
