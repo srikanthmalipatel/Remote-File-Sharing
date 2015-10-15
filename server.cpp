@@ -317,7 +317,7 @@ CommandID Server::getCommandID(char comnd[]) {
  * Description: This function updates m_ipAddress buffer with the public interface ip
  */
 void Server::updateIpAddress() {
-    struct ifaddrs *ifAddr;
+    /*struct ifaddrs *ifAddr;
     char host[32];
 
     // ifAddr contains a list of all local interfaces
@@ -336,7 +336,64 @@ void Server::updateIpAddress() {
         ifAddr = ifAddr->ifa_next;
     }
     //printf("ip: %s", m_ipAddress);
-    return;
+    return;*/
+	char hostname[256];
+		if (gethostname(hostname, sizeof(hostname)) < 0) {
+		    perror("gethostname");
+		    return;
+		}
+
+		// Google's DNS server IP
+		char* target_name = "8.8.8.8";
+		// DNS port
+		char* target_port = "53";
+
+		/* get peer server */
+		struct addrinfo hints;
+		memset(&hints, 0, sizeof(hints));
+		hints.ai_family = AF_INET;
+		hints.ai_socktype = SOCK_STREAM;
+
+		struct addrinfo* info;
+		int ret = 0;
+		if ((ret = getaddrinfo(target_name, target_port, &hints, &info)) != 0) {
+		    printf("[ERROR]: getaddrinfo error: %s\n", gai_strerror(ret));
+		    return;
+		}
+
+		if (info->ai_family == AF_INET6) {
+		    printf("[ERROR]: do not support IPv6 yet.\n");
+		    return;
+		}
+
+		/* create socket */
+		int sock = socket(info->ai_family, info->ai_socktype, info->ai_protocol);
+		if (sock <= 0) {
+		    perror("socket");
+		    return;
+		}
+
+		/* connect to server */
+		if (connect(sock, info->ai_addr, info->ai_addrlen) < 0) {
+		    perror("connect");
+		    close(sock);
+		    return;
+		}
+
+		/* get local socket info */
+		struct sockaddr_in local_addr;
+		socklen_t addr_len = sizeof(local_addr);
+		if (getsockname(sock, (struct sockaddr*)&local_addr, &addr_len) < 0) {
+		    perror("getsockname");
+		    close(sock);
+		    return;
+		}
+
+		/* get peer ip addr */
+		if (inet_ntop(local_addr.sin_family, &(local_addr.sin_addr), m_ipAddress, sizeof(m_ipAddress)) == NULL) {
+		    perror("inet_ntop");
+		    return;
+		}
 }
 
 /*void Server::addNodetoList(int sockfd, char *ipAddr, int port) {

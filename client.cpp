@@ -100,7 +100,7 @@ void Client::eventHandler() {
                 		// Received SYNC message from server
                 		if(strstr(recvBuff,"SYNC")) {
 							cout << "Message: " << recvBuff << " from client " << m_nodeList[i].hostName << endl;
-							//command_sync();
+							start_sync();
 						}
                 	}
                 	memset(recvBuff, 0, 1024);
@@ -154,6 +154,11 @@ void Client::eventHandler() {
 							strcpy(fileName, strtok(NULL, " "));
 							handle_put(i, fileName);
                 		}
+                		// Recieved SYNC start message from clients
+                		if(strstr(recvBuff,"SYNC START")) {
+							cout << "Message: " << recvBuff << " from client " << m_nodeList[i].hostName << endl;
+							start_sync();
+						}
                 	}
                 	memset(recvBuff, 0, 1024);
                 }
@@ -317,7 +322,7 @@ void Client::command_creator() {
  * Description: This functions displays all the IP address and the listening port of this process
  */
 void Client::command_display() {
-    printf("Machine's IP Address is: %s and Listening port of server is: %d \n", m_ipAddress, m_nListenPort);
+    printf("Machine's IP Address is: %s and Listening port of client is: %d \n", m_ipAddress, m_nListenPort);
 }
 
 /*
@@ -771,7 +776,7 @@ void Client::handle_put(int sockFd, char *filename, bool sendMsg) {
 
 	// record the time when upload is starting
 	gettimeofday(&begin, NULL);
-	cout << "Upload Starting...!" << endl;
+	cout << "Uploading...!" << endl;
 	while(remBytes > 0)
 	{
 		int len;
@@ -785,7 +790,7 @@ void Client::handle_put(int sockFd, char *filename, bool sendMsg) {
 			bytesRead = fread(buffer, 1, BYTES512-remBytes , fp);
 			len=bytesRead;
 		}
-		//cout << "sending bytes: " << bytesRead << endl;
+		cout << "sending bytes: " << bytesRead << endl;
 		int res=sendall(sockFd, buffer, &len);
 		if( res < 0)
 		{
@@ -835,15 +840,15 @@ void Client::handle_get(int sockFd, char *fileName, size_t fileSz) {
 	while( bytesLeft > 0)
 	{
 		bytesReceived = recv(sockFd, buff, BYTES512, 0);
-		//cout << "recieved bytes: " << bytesReceived << endl;
+		cout << "recieved bytes: " << bytesReceived << endl;
 		bytesWritten = fwrite(buff,1,bytesReceived, fp);
-		//cout << "written bytes: " << bytesWritten << endl;
+		cout << "written bytes: " << bytesWritten << endl;
 		if(bytesWritten < bytesReceived)
 		{
 			cout<<"write failed."<<endl;
 		}
 		bytesLeft=bytesLeft-bytesWritten;
-		//cout << "bytesleft " << bytesLeft << endl;
+		cout << "bytesleft " << bytesLeft << endl;
 		memset(buff, '0', sizeof(buff));
 	}
 
@@ -858,6 +863,18 @@ void Client::handle_get(int sockFd, char *fileName, size_t fileSz) {
 		gettimeofday(&end, NULL);
 		double timeTaken=1000 * (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1000;
 		cout<<"Downloaded FILE:" << fileName << "in " << timeTaken/1000 << " ms"  <<endl;
+	}
+}
+
+void Client::start_sync() {
+	// loop through all active connections and send SYNC START message
+	for(int i=0; i<10; i++) {
+		if(m_nodeList[i].state == ACTIVE) {
+			char buffer[32];
+			int len;
+			sprintf(buffer, "SYNC START");
+			sendall(m_nodeList[i].sockFd, buffer, &len);
+		}
 	}
 }
 
@@ -911,7 +928,7 @@ CommandID Client::getCommandID(char comnd[]) {
  * Description: This function updates m_ipAddress buffer with the public interface ip
  */
 void Client::updateIpAddress() {
-    struct ifaddrs *ifAddr;
+    /*struct ifaddrs *ifAddr;
     char host[32];
 
     // ifAddr contains a list of all local interfaces
@@ -929,7 +946,66 @@ void Client::updateIpAddress() {
         }
         ifAddr = ifAddr->ifa_next;
     }
-    return;
+    return;*/
+	/* get my hostname */
+	char hostname[256];
+	if (gethostname(hostname, sizeof(hostname)) < 0) {
+	    perror("gethostname");
+	    return;
+	}
+
+	// Google's DNS server IP
+	char* target_name = "8.8.8.8";
+	// DNS port
+	char* target_port = "53";
+
+	/* get peer server */
+	struct addrinfo hints;
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+
+	struct addrinfo* info;
+	int ret = 0;
+	if ((ret = getaddrinfo(target_name, target_port, &hints, &info)) != 0) {
+	    printf("[ERROR]: getaddrinfo error: %s\n", gai_strerror(ret));
+	    return;
+	}
+
+	if (info->ai_family == AF_INET6) {
+	    printf("[ERROR]: do not support IPv6 yet.\n");
+	    return;
+	}
+
+	/* create socket */
+	int sock = socket(info->ai_family, info->ai_socktype, info->ai_protocol);
+	if (sock <= 0) {
+	    perror("socket");
+	    return;
+	}
+
+	/* connect to server */
+	if (connect(sock, info->ai_addr, info->ai_addrlen) < 0) {
+	    perror("connect");
+	    close(sock);
+	    return;
+	}
+
+	/* get local socket info */
+	struct sockaddr_in local_addr;
+	socklen_t addr_len = sizeof(local_addr);
+	if (getsockname(sock, (struct sockaddr*)&local_addr, &addr_len) < 0) {
+	    perror("getsockname");
+	    close(sock);
+	    return;
+	}
+
+	/* get peer ip addr */
+	if (inet_ntop(local_addr.sin_family, &(local_addr.sin_addr), m_ipAddress, sizeof(m_ipAddress)) == NULL) {
+	    perror("inet_ntop");
+	    return;
+	}
+
 }
 
 void Client::displayUsage() {

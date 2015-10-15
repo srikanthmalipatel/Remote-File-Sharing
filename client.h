@@ -39,6 +39,7 @@ private:
     char m_ipAddress[32];	// host ipaddress in numbers and dot format.
     char m_srvIpAddress[32]; // this would no longer be required becz nodeList[0] contains server details.
     char m_srvList[1024];	// this holds the updates sent by server when ever there is a new client has registered/terminated/exited.
+    bool m_nUnderSync;
 
     // socket specific members
 	int m_nListenSd;        // listen socket descriptor.
@@ -81,6 +82,7 @@ private:
 	void displayServerList();
 	void handle_put(int sockFd, char *fileName, bool sendMsg=true);
 	void handle_get(int sockFd, char *fileName, size_t fileSz);
+	void start_sync();
 
 	// utility functions
     int getArgCount(char *line, const char *delim);
