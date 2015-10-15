@@ -29,6 +29,7 @@ Client::Client(int port) {
     this->m_nLatestIndex = 0;
     for(int i=0; i<10; i++)
 	{
+    	m_nodeList[i].id = i+1;
     	m_nodeList[i].state=INACTIVE;
     	m_nodeList[i].isServer=false;
 	}
@@ -159,6 +160,21 @@ void Client::eventHandler() {
 							cout << "Message: " << recvBuff << " from client " << m_nodeList[i].hostName << endl;
 							start_sync();
 						}
+                		// Recieved TERMINATE message from peer
+                		if(strstr(recvBuff,"TERMINATE")) {
+                			cout << "Message: " << recvBuff << " from client " << m_nodeList[i].hostName << endl;
+                			// send terminate OK message
+                			memset(recvBuff, 0, sizeof(recvBuff));
+                			sprintf(recvBuff, "TERMINATE OK");
+                			int len = sizeof(recvBuff);
+                			sendall(i, recvBuff, &len);
+                			// find the index associated with this socket id
+                			for(int j=0; j<10; j++) {
+                				if(m_nodeList[j].sockFd == i)
+                					handle_terminate(j);
+                			}
+                			cout << "TERMINATED connection with client " << m_nodeList[i].hostName << " Successfully" << endl;
+                		}
                 	}
                 	memset(recvBuff, 0, 1024);
                 }
@@ -219,6 +235,16 @@ void Client::commandShell() {
 			strcpy(arg1, strtok(NULL, " "));
 			strcpy(arg2, strtok(NULL, " "));
 			command_register(arg1, arg2);
+			break;
+		case COMMAND_TERMINATE:
+			if(!m_bisRegistered) {
+				cout << "PUT Error: Please register to the server first!" << endl;
+				break;
+			}
+			strcpy(arg1, strtok(NULL, " "));
+			command_terminate(strtol(arg1, NULL, 10));
+			break;
+		case COMMAND_EXIT:
 			break;
 		case COMMAND_CONNECT:
 			if(nArgs != 3) {
@@ -292,6 +318,7 @@ void Client::command_help() {
     printf("\tDIPSLAY - Displays the IP address and listening port of this process\n");
     printf("\tLIST - Displays a list of clients registered on this server\n");
     printf("\tREGISTER <server IP> <Port> - Registers with the server\n");
+    printf("\tTERMINATE <ID> - Terminates the connection with peer associated with the ID \n");
     printf("\tCONNECT <IP/Hostname> <Port> - Connects to a client already registered with the server. *Note: Maximum connections: 3\n");
     printf("\tPUT <CONNECTION ID> <FILE NAME> - Uploads the file to the specified peer\n");
     printf("\tGET <CONNECTION ID> <FILE NAME> - Downloads the file to the specified peer\n");
@@ -507,6 +534,60 @@ void Client::command_connect(char *ipOrHost, char *port) {
  */
 void Client::command_list() {
     // Complete this
+	printf("%-5s%-35s%-20s%-8s \n", "ID", "HOSTNAME", "IP ADDRESS", "PORT");
+	for(int i=0; i<10; i++) {
+		if(m_nodeList[i].state == ACTIVE)
+			printf("%-5d%-35s%-20s%-8d \n", m_nodeList[i].id, m_nodeList[i].hostName, m_nodeList[i].ip_addr, m_nodeList[i].listenPort);
+	}
+}
+
+
+/*
+ * Function:    Command_terminate(int id)
+ * Parameters:  int ID
+ * Returns:     None
+ * Description: Terminates the connection associated with a particular ID
+ */
+void Client::command_terminate(int id) {
+	if(m_nConnCount == 0) {
+		cout << "TERMINATE Error: No connected peers! ignoring this command" << endl;
+		return;
+	}
+	int sockFd = -1, i, size;
+	// get socket associated with this id
+	for(i=0; i<10; i++) {
+		if(m_nodeList[i].id == id && m_nodeList[i].state != ACTIVE) {
+			cout << "TERMINATE Error: Please enter a valid connection ID. Type LIST to see active connections" << endl;
+			return;
+		}
+		else if(m_nodeList[i].id == id && i == 0) {
+			cout << "TERMINATE Error: Cannot terminate connection with server. Please use EXIT command" << endl;
+			return;
+		}
+		else if(m_nodeList[i].id == id) {
+			sockFd = m_nodeList[i].sockFd;
+			break;
+		}
+	}
+	if(sockFd == -1) {
+		cout << "TERMINATE Error: Please enter a valid connection ID. Type LIST to see active connections" << endl;
+		return;
+	}
+	cout << "TERMINATING connection with peer " << m_nodeList[i].hostName << endl;
+	// send Terminate message to the peer
+	char buf[32] = {0};
+	sprintf(buf, "TERMINATE");
+	size = sizeof(buf);
+	sendall(sockFd, buf, &size);
+
+	// recv Terminate OK message from the peer
+	memset(buf, 0, sizeof buf);
+	int bytesReceived = recv(sockFd, buf, sizeof buf, 0);
+	buf[strlen(buf)] = 0;
+	if(strstr(buf, "TERMINATE OK")) {
+		handle_terminate(i);
+	}
+
 }
 
 /*
@@ -579,16 +660,6 @@ void Client::command_sync() {
 	sendall(m_nodeList[0].sockFd, buffer, &nRead);
 	if(!m_bInSync)
 		m_bInSync = true;
-}
-
-/*
- * Function:    Command_terminate(int connectionID)
- * Parameters:  int connectionId
- * Returns:     None
- * Description: This functions will terminate a connection already in registered_list
- */
-void Client::command_terminate(int connectionID) {
-    // Complete this
 }
 
 /*
@@ -878,8 +949,34 @@ void Client::start_sync() {
 	}
 }
 
+void Client::handle_terminate(int Ix) {
+	// mark the node being terminated as unused and close socket
+	m_nodeList[Ix].state = INACTIVE;
+	// reorder the nodes as per id
+	reorderNodeList(Ix);
+	close(m_nodeList[Ix].sockFd);
+	// remove this socket from master set and update Max file descriptor.
+	FD_CLR(m_nodeList[Ix].sockFd, &m_masterSet);
+	if (m_nodeList[Ix].sockFd==m_nMaxFd)
+	{
+		m_nMaxFd--;
+	}
+	m_nConnCount--;
+	cout << "Connection TERMINATED Successfully" << endl;
+}
+
+void Client::reorderNodeList(int Ix) {
+	for(int i=Ix+1; i<10; i++) {
+		if(m_nodeList[i].state == ACTIVE) {
+			m_nodeList[i].id -= 1;
+			m_nodeList[i-1] = m_nodeList[i];
+			m_nodeList[i].state = INACTIVE;
+		}
+	}
+}
+
 /*****************************************************************************
- *                      Server utility functions                             *
+ *                      Client utility functions                             *
  * **************************************************************************/
 
 int Client::getArgCount(char *line, const char *delim) {
@@ -909,6 +1006,10 @@ CommandID Client::getCommandID(char comnd[]) {
         return COMMAND_LIST;
     else if(strcasecmp(comnd, "REGISTER") == 0)
     	return COMMAND_REGISTER;
+    else if(strcasecmp(comnd, "TERMINATE") == 0)
+    	return COMMAND_TERMINATE;
+    else if(strcasecmp(comnd, "EXIT") == 0)
+    	return COMMAND_EXIT;
     else if(strcasecmp(comnd, "CONNECT") == 0)
     	return COMMAND_CONNECT;
     else if(strcasecmp(comnd, "PUT") == 0)
@@ -928,7 +1029,7 @@ CommandID Client::getCommandID(char comnd[]) {
  * Description: This function updates m_ipAddress buffer with the public interface ip
  */
 void Client::updateIpAddress() {
-    /*struct ifaddrs *ifAddr;
+    struct ifaddrs *ifAddr;
     char host[32];
 
     // ifAddr contains a list of all local interfaces
@@ -946,8 +1047,9 @@ void Client::updateIpAddress() {
         }
         ifAddr = ifAddr->ifa_next;
     }
-    return;*/
-	/* get my hostname */
+    return;
+	/*
+	// get my hostname
 	char hostname[256];
 	if (gethostname(hostname, sizeof(hostname)) < 0) {
 	    perror("gethostname");
@@ -959,7 +1061,7 @@ void Client::updateIpAddress() {
 	// DNS port
 	char* target_port = "53";
 
-	/* get peer server */
+	// get peer server
 	struct addrinfo hints;
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_INET;
@@ -977,21 +1079,21 @@ void Client::updateIpAddress() {
 	    return;
 	}
 
-	/* create socket */
+	// create socket
 	int sock = socket(info->ai_family, info->ai_socktype, info->ai_protocol);
 	if (sock <= 0) {
 	    perror("socket");
 	    return;
 	}
 
-	/* connect to server */
+	// connect to server
 	if (connect(sock, info->ai_addr, info->ai_addrlen) < 0) {
 	    perror("connect");
 	    close(sock);
 	    return;
 	}
 
-	/* get local socket info */
+	// get local socket info
 	struct sockaddr_in local_addr;
 	socklen_t addr_len = sizeof(local_addr);
 	if (getsockname(sock, (struct sockaddr*)&local_addr, &addr_len) < 0) {
@@ -1000,12 +1102,12 @@ void Client::updateIpAddress() {
 	    return;
 	}
 
-	/* get peer ip addr */
+	// get peer ip addr
 	if (inet_ntop(local_addr.sin_family, &(local_addr.sin_addr), m_ipAddress, sizeof(m_ipAddress)) == NULL) {
 	    perror("inet_ntop");
 	    return;
 	}
-
+	*/
 }
 
 void Client::displayUsage() {

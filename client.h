@@ -35,6 +35,7 @@ private:
     // client utilites
     int m_nListenPort;		// listening port of this client.
     int m_nConnCount;		// active connections count.
+    int m_nIdTracker;		// keep the track of current running id
     bool m_bInSync;			// used to check if the client is already in sync
     char m_ipAddress[32];	// host ipaddress in numbers and dot format.
     char m_srvIpAddress[32]; // this would no longer be required becz nodeList[0] contains server details.
@@ -71,10 +72,10 @@ private:
 	int command_register(char *ipAddr, char *port);
 	void command_connect(char *ipAddr, char *port);
 	void command_list();
+	void command_terminate(int id);
 	void command_put(char *id, char *port, char *filename);
 	void command_get(char *id, char *port, char *filename);
 	void command_sync();
-	void command_terminate(int connectionId);
 	void command_quit();
 
 	void startListenClient();
@@ -82,7 +83,9 @@ private:
 	void displayServerList();
 	void handle_put(int sockFd, char *fileName, bool sendMsg=true);
 	void handle_get(int sockFd, char *fileName, size_t fileSz);
+	void handle_terminate(int Ix);
 	void start_sync();
+	void reorderNodeList(int Ix);
 
 	// utility functions
     int getArgCount(char *line, const char *delim);

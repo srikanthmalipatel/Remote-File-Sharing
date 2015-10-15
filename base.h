@@ -39,6 +39,8 @@ typedef enum {
     COMMAND_DISPLAY,
     COMMAND_LIST,
 	COMMAND_REGISTER,
+	COMMAND_TERMINATE,
+	COMMAND_EXIT,
 	COMMAND_CONNECT,
 	COMMAND_PUT,
 	COMMAND_GET,
@@ -54,6 +56,7 @@ typedef enum {
 
 // this is used by server to maintain registered client list, where as client uses it to maintain active connections
 typedef struct {
+	int id;
 	int sockFd;
 	bool isServer;
 	connectionState state;

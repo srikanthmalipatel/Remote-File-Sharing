@@ -25,6 +25,7 @@ Server::Server(int port) {
     // initalize nodeList and its tracker
 	for(int i=0; i<10; i++)
 	{
+		m_nodeList[i].id = i+1;
 		m_nodeList[i].state=INACTIVE;
 		m_nodeList[i].isServer=false;
 	}
@@ -187,6 +188,11 @@ void Server::command_display() {
  */
 void Server::command_list() {
     // Complete this
+	printf("%-5s%-35s%-20s%-8s \n", "ID", "HOSTNAME", "IP ADDRESS", "PORT");
+	for(int i=0; i<10; i++) {
+		if(m_nodeList[i].state == ACTIVE)
+			printf("%-5d%-35s%-20s%-8d \n", m_nodeList[i].id, m_nodeList[i].hostName, m_nodeList[i].ip_addr, m_nodeList[i].listenPort);
+	}
 }
 
 void Server::startListenServer() {
@@ -317,7 +323,7 @@ CommandID Server::getCommandID(char comnd[]) {
  * Description: This function updates m_ipAddress buffer with the public interface ip
  */
 void Server::updateIpAddress() {
-    /*struct ifaddrs *ifAddr;
+    struct ifaddrs *ifAddr;
     char host[32];
 
     // ifAddr contains a list of all local interfaces
@@ -336,19 +342,22 @@ void Server::updateIpAddress() {
         ifAddr = ifAddr->ifa_next;
     }
     //printf("ip: %s", m_ipAddress);
-    return;*/
+    return;
+	/*
 	char hostname[256];
 		if (gethostname(hostname, sizeof(hostname)) < 0) {
 		    perror("gethostname");
 		    return;
 		}
 
+
+
 		// Google's DNS server IP
 		char* target_name = "8.8.8.8";
 		// DNS port
 		char* target_port = "53";
 
-		/* get peer server */
+		// get peer server
 		struct addrinfo hints;
 		memset(&hints, 0, sizeof(hints));
 		hints.ai_family = AF_INET;
@@ -366,21 +375,21 @@ void Server::updateIpAddress() {
 		    return;
 		}
 
-		/* create socket */
+		// create socket
 		int sock = socket(info->ai_family, info->ai_socktype, info->ai_protocol);
 		if (sock <= 0) {
 		    perror("socket");
 		    return;
 		}
 
-		/* connect to server */
+		// connect to server
 		if (connect(sock, info->ai_addr, info->ai_addrlen) < 0) {
 		    perror("connect");
 		    close(sock);
 		    return;
 		}
 
-		/* get local socket info */
+		// get local socket info
 		struct sockaddr_in local_addr;
 		socklen_t addr_len = sizeof(local_addr);
 		if (getsockname(sock, (struct sockaddr*)&local_addr, &addr_len) < 0) {
@@ -389,11 +398,12 @@ void Server::updateIpAddress() {
 		    return;
 		}
 
-		/* get peer ip addr */
+		// get peer ip addr
 		if (inet_ntop(local_addr.sin_family, &(local_addr.sin_addr), m_ipAddress, sizeof(m_ipAddress)) == NULL) {
 		    perror("inet_ntop");
 		    return;
 		}
+		*/
 }
 
 /*void Server::addNodetoList(int sockfd, char *ipAddr, int port) {
