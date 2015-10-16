@@ -946,7 +946,9 @@ void Client::handle_put(int sockFd, char *filename, bool sendMsg) {
 			//calculate the time taken for upload
 			gettimeofday(&end, NULL);
 			double uploadTime=1000 * (end.tv_sec - begin.tv_sec) + (end.tv_usec - begin.tv_usec) / 1000;
-			cout << "Transfer Successful " << uploadTime/1000 << " seconds" << endl;
+			uploadTime /= 1000;
+			cout << "Upload Completed to client " << m_nodeList[i].hostName << endl;
+			cout << "Tx End: Size=" << fileSz << " Bytes Time="  << uploadTime << " Seconds Tx Rate=" << fileSz/uploadTime << " Bytes/Sec" << endl;
 			return;
 		}
 
@@ -1002,7 +1004,9 @@ void Client::handle_get(int sockFd, char *fileName, size_t fileSz) {
 		fclose(fp);
 		gettimeofday(&end, NULL);
 		double downloadTime=1000 * (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1000;
-		cout<<"Downloaded FILE:" << fileName << "in " << downloadTime/1000 << " seconds"  <<endl;
+		downloadTime /= 1000;
+		cout << "Download Successful from client " << m_nodeList[i].hostName << endl;
+		cout << "Rx End: Size=" << fileSz << " Bytes Time="  << downloadTime << " Seconds Rx Rate=" << fileSz/downloadTime << " Bytes/Sec" << endl;
 	}
 }
 
