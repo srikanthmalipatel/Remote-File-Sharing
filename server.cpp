@@ -98,8 +98,24 @@ void Server::eventHandler() {
                 				}
                 			}
                 		}
+                		if(strcmp(recvBuff, "QUIT") == 0) {
+                			cout << "Received Message: " << recvBuff << "from client" << endl;
+                			for(int j=0; j<10; j++) {
+                				if(m_nodeList[j].sockFd == i) {
+                					handle_terminate(j);
+                				}
+                			}
+                			updateNodesinList();
+                		}
                 	}
                 	// if bytesRead=0 then terminate connection
+                	else {
+						cout << "Client disconnected: " <<  m_nodeList[i].hostName << endl;
+						for(int j=0; j<10; j++) {
+							if(m_nodeList[j].sockFd == i)
+								handle_terminate(j);
+						}
+					}
                 }
 
             }
@@ -291,6 +307,38 @@ void Server::newConnectionHandler() {
 	if (newConnSd > m_nMaxFd) {
 		m_nMaxFd = newConnSd;
 	}
+}
+
+void Server::handle_terminate(int Ix) {
+	// mark the node being terminated as unused and close socket
+	cout << "closing socket " << m_nodeList[Ix].sockFd << " and marking index " << Ix << " as Inactive" << endl;
+	m_nodeList[Ix].state = INACTIVE;
+	close(m_nodeList[Ix].sockFd);
+	// remove this socket from master set and update Max file descriptor.
+	FD_CLR(m_nodeList[Ix].sockFd, &m_masterSet);
+	if (m_nodeList[Ix].sockFd==m_nMaxFd)
+	{
+		m_nMaxFd--;
+	}
+	m_nodeList[Ix].sockFd = -1;
+
+	// reorder the nodes as per id
+	reorderNodeList(Ix);
+
+	cout << "Connection TERMINATED Successfully" << endl;
+}
+
+void Server::reorderNodeList(int Ix) {
+	for(int i=Ix+1; i<10; i++) {
+		if(m_nodeList[i].state == ACTIVE) {
+			m_nodeList[i-1] = m_nodeList[i];
+			m_nodeList[i].state = INACTIVE;
+		}
+	}
+	for(int i=0; i<10; i++) {
+		m_nodeList[i].id = i+1;
+	}
+	m_nLatestIndex--;
 }
 
 /*****************************************************************************

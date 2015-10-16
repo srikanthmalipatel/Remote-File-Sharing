@@ -61,12 +61,14 @@ private:
     void command_display();
     void command_list();
 
+    void handle_terminate(int Ix);
     void startListenServer();
     void newConnectionHandler();
     // Utility functions
     CommandID getCommandID(char comnd[]);
     void updateIpAddress();
     void updateNodesinList();
+    void reorderNodeList(int Ix);
 };
 
 #endif /* !SERVER_H */

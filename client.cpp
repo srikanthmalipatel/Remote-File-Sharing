@@ -68,7 +68,7 @@ void Client::eventHandler() {
         char recvBuff[1024];
         for(int i=0; i<=m_nMaxFd; i++) {
             if(FD_ISSET(i, &m_readSet)) {
-                if(i == STDIN) {
+                if(i == 0) {
                     commandShell();
                 }
                 else if(i == m_nListenSd) {
@@ -172,6 +172,13 @@ void Client::eventHandler() {
                 			cout << "TERMINATED connection with client " << m_nodeList[i].hostName << " Successfully" << endl;
                 		}
                 	}
+                	else {
+                		cout << "Client disconnected: " <<  m_nodeList[i].hostName << endl;
+                		for(int j=0; j<10; j++) {
+							if(m_nodeList[j].sockFd == i)
+								handle_terminate(j);
+						}
+                	}
                 	memset(recvBuff, 0, 1024);
                 }
             }
@@ -240,7 +247,8 @@ void Client::commandShell() {
 			strcpy(arg1, strtok(NULL, " "));
 			command_terminate(strtol(arg1, NULL, 10));
 			break;
-		case COMMAND_EXIT:
+		case COMMAND_QUIT:
+			command_quit();
 			break;
 		case COMMAND_CONNECT:
 			if(nArgs != 3) {
@@ -587,6 +595,46 @@ void Client::command_terminate(int id) {
 }
 
 /*
+ * Function:    Command_terminate(int id)
+ * Parameters:  int ID
+ * Returns:     None
+ * Description: Terminates the connection associated with a particular ID
+ */
+void Client::command_quit() {
+	// send terminate message to all existing connections
+	cout << "Processing Quit Command " << endl;
+	char buff[1024] = {0};
+	int size = sizeof(buff);
+	sprintf(buff, "TERMINATE");
+	for(int i=1; i<10; i++) {
+		if(m_nodeList[i].state == ACTIVE) {
+			cout << "Sending message to client on socket " << m_nodeList[i].sockFd << endl;
+			m_nodeList[i].state = INACTIVE;
+			if(sendall(m_nodeList[i].sockFd, buff, &size) != 0) {
+				cout << "Total Bytes Sent " << size;
+				cout << "QUIT Error: send failed" << endl;
+				return;
+			}
+			close(m_nodeList[i].sockFd);
+			FD_CLR(m_nodeList[i].sockFd, &m_masterSet);
+		}
+	}
+	// send message to server to unregister
+	memset(buff, 0, sizeof buff);
+	sprintf(buff, "QUIT");
+	size = sizeof(buff);
+	if(sendall(m_nodeList[0].sockFd, buff, &size) != 0) {
+		cout << "Total Bytes Sent " << size;
+		cout << "QUIT Error: send failed" << endl;
+		return;
+	}
+	m_bisRegistered = false;
+	m_nodeList[0].state = INACTIVE;
+	close(m_nodeList[0].sockFd);
+	FD_CLR(m_nodeList[0].sockFd, &m_masterSet);
+}
+
+/*
  * Function:    Command_put()
  * Parameters:  id - connection ID, filename - file to upload
  * Returns:     None
@@ -668,16 +716,6 @@ void Client::command_sync() {
 	sendall(m_nodeList[0].sockFd, buffer, &nRead);
 	if(!m_bInSync)
 		m_bInSync = true;
-}
-
-/*
- * Function:    Command_quit()
- * Parameters:  None
- * Returns:     None
- * Description: This functions closes all connections and terminates this process
- */
-void Client::command_quit() {
-    // Complete this
 }
 
 void Client::startListenClient() {
@@ -1028,8 +1066,8 @@ CommandID Client::getCommandID(char comnd[]) {
     	return COMMAND_REGISTER;
     else if(strcasecmp(comnd, "TERMINATE") == 0)
     	return COMMAND_TERMINATE;
-    else if(strcasecmp(comnd, "EXIT") == 0)
-    	return COMMAND_EXIT;
+    else if(strcasecmp(comnd, "QUIT") == 0)
+    	return COMMAND_QUIT;
     else if(strcasecmp(comnd, "CONNECT") == 0)
     	return COMMAND_CONNECT;
     else if(strcasecmp(comnd, "PUT") == 0)
