@@ -700,7 +700,7 @@ void Client::command_get(int id, char *filename) {
 		}
 	}
 	if(sockFd == -1) {
-		cout << "PUT Error: Please connect to the peer first!" << endl;
+		cout << "GET Error: Please connect to the peer first!" << endl;
 		return;
 	}
 	// send GET message
@@ -903,7 +903,13 @@ void Client::handle_put(int sockFd, char *filename, bool sendMsg) {
 
 	// record the time when upload is starting
 	gettimeofday(&begin, NULL);
-	cout << "Uploading...!" << endl;
+	int i;
+	for(i=0; i<10; i++) {
+		if(m_nodeList[i].state == ACTIVE && m_nodeList[i].sockFd == sockFd) {
+			break;
+		}
+	}
+	cout << "Uploading file " << filename  << "to client!" << m_nodeList[i].hostName << endl;
 	while(remBytes > 0)
 	{
 		int len;
@@ -917,7 +923,7 @@ void Client::handle_put(int sockFd, char *filename, bool sendMsg) {
 			bytesRead = fread(buffer, 1, BYTES512-remBytes , fp);
 			len=bytesRead;
 		}
-		cout << "sending bytes: " << bytesRead << endl;
+		//cout << "sending bytes: " << bytesRead << endl;
 
 		if( sendall(sockFd, buffer, &len) < 0)
 		{
@@ -926,7 +932,7 @@ void Client::handle_put(int sockFd, char *filename, bool sendMsg) {
 			break;
 		}
 		remBytes=remBytes-bytesRead;
-		cout << "remaning bytes: " << remBytes << endl;
+		//cout << "remaning bytes: " << remBytes << endl;
 		memset(buffer, '0', sizeof(buffer));
 	}
 
@@ -940,7 +946,7 @@ void Client::handle_put(int sockFd, char *filename, bool sendMsg) {
 			//calculate the time taken for upload
 			gettimeofday(&end, NULL);
 			double uploadTime=1000 * (end.tv_sec - begin.tv_sec) + (end.tv_usec - begin.tv_usec) / 1000;
-			cout << "Transfer Successful " << uploadTime << " milliseconds" << endl;
+			cout << "Transfer Successful " << uploadTime/1000 << " seconds" << endl;
 			return;
 		}
 
@@ -961,23 +967,28 @@ void Client::handle_get(int sockFd, char *fileName, size_t fileSz) {
 		cerr<<"File Open Error";
 		return ;
 	}
-
-	cout<<"Starting to Download file  " << fileName << endl;
+	int i;
+	for(i=0; i<10; i++) {
+		if(m_nodeList[i].state == ACTIVE && m_nodeList[i].sockFd == sockFd) {
+			break;
+		}
+	}
+	cout<<"Downloading file " << fileName << " from client " << m_nodeList[i].hostName << endl;
 	gettimeofday(&start, NULL);
 
 	/* Receive data in chunks of BUF_SIZE bytes */
 	while( bytesLeft > 0)
 	{
 		bytesReceived = recv(sockFd, buff, BYTES512, 0);
-		cout << "recieved bytes: " << bytesReceived << endl;
+		//cout << "recieved bytes: " << bytesReceived << endl;
 		bytesWritten = fwrite(buff,1,bytesReceived, fp);
-		cout << "written bytes: " << bytesWritten << endl;
+		//cout << "written bytes: " << bytesWritten << endl;
 		if(bytesWritten < bytesReceived)
 		{
 			cout<<"write failed."<<endl;
 		}
 		bytesLeft=bytesLeft-bytesWritten;
-		cout << "bytesleft " << bytesLeft << endl;
+		//cout << "bytesleft " << bytesLeft << endl;
 		memset(buff, '0', sizeof(buff));
 	}
 
@@ -990,8 +1001,8 @@ void Client::handle_get(int sockFd, char *fileName, size_t fileSz) {
 		cout<<"Download Complete"<<endl;
 		fclose(fp);
 		gettimeofday(&end, NULL);
-		double timeTaken=1000 * (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1000;
-		cout<<"Downloaded FILE:" << fileName << "in " << timeTaken/1000 << " ms"  <<endl;
+		double downloadTime=1000 * (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1000;
+		cout<<"Downloaded FILE:" << fileName << "in " << downloadTime/1000 << " seconds"  <<endl;
 	}
 }
 
