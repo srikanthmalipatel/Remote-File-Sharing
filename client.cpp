@@ -103,6 +103,13 @@ void Client::eventHandler() {
 							start_sync();
 						}
                 	}
+                	else {
+						cout << "Server disconnected: " <<  m_nodeList[i].hostName << endl;
+						for(int j=0; j<10; j++) {
+							if(m_nodeList[j].sockFd == i)
+								handle_terminate(j);
+						}
+					}
                 	memset(recvBuff, 0, 1024);
                 }
                 else {
@@ -1013,6 +1020,22 @@ void Client::handle_terminate(int Ix) {
 	}
 	m_nodeList[Ix].sockFd = -1;
 	m_nConnCount--;
+
+	if(Ix == 0) {
+		cout << "Server Disconnected: Terminating all connections" << endl;
+		for(int i=0; i<10; i++) {
+			if(m_nodeList[i].state == ACTIVE) {
+				m_nodeList[i].state = INACTIVE;
+				close(m_nodeList[i].sockFd);
+				FD_CLR(m_nodeList[i].sockFd, &m_masterSet);
+				if (m_nodeList[i].sockFd==m_nMaxFd)
+				{
+					m_nMaxFd--;
+				}
+			}
+		}
+		m_bisRegistered = false;
+	}
 
 	// reorder the nodes as per id
 	reorderNodeList(Ix);
