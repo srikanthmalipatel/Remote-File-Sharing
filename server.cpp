@@ -115,6 +115,7 @@ void Server::eventHandler() {
 							if(m_nodeList[j].sockFd == i)
 								handle_terminate(j);
 						}
+						updateNodesinList();
 					}
                 }
 

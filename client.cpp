@@ -35,6 +35,7 @@ Client::Client(int port) {
 	}
     // move this to common.cpp
     updateIpAddress();
+    getHostName(m_ipAddress, m_hostName);
 
     FD_ZERO(&m_masterSet);
 	FD_ZERO(&m_readSet);
@@ -826,7 +827,7 @@ void Client::newConnectionHandler() {
 				strcpy(m_nodeList[i].ip_addr,remoteIP);
 				getHostName(m_nodeList[i].ip_addr, m_nodeList[i].hostName);
 				m_nLatestIndex += 1;
-				cout << "Added node " << m_nodeList[i].listenPort << " with socket " << m_nodeList[i].sockFd << endl;
+				cout << "Added node " << m_nodeList[i].listenPort << " with socket " << m_nodeList[i].sockFd << endl << endl;
 				break;
 			}
 			id = m_nodeList[i].id;
@@ -909,7 +910,7 @@ void Client::handle_put(int sockFd, char *filename, bool sendMsg) {
 			break;
 		}
 	}
-	cout << "Uploading file " << filename  << "to client!" << m_nodeList[i].hostName << endl;
+	cout << "Uploading file " << filename  << " to client!" << m_nodeList[i].hostName << endl;
 	while(remBytes > 0)
 	{
 		int len;
@@ -947,8 +948,8 @@ void Client::handle_put(int sockFd, char *filename, bool sendMsg) {
 			gettimeofday(&end, NULL);
 			double uploadTime=1000 * (end.tv_sec - begin.tv_sec) + (end.tv_usec - begin.tv_usec) / 1000;
 			uploadTime /= 1000;
-			cout << "Upload Completed to client " << m_nodeList[i].hostName << endl;
-			cout << "Tx End: Size=" << fileSz << " Bytes Time="  << uploadTime << " Seconds Tx Rate=" << fileSz/uploadTime << " Bytes/Sec" << endl;
+			cout << "Upload Successful to client " << m_nodeList[i].hostName << endl;
+			cout << fixed << "Tx End: Size=" << fileSz << " Bytes, Time="  << uploadTime << " Seconds, Tx Rate=" << fileSz/uploadTime << " Bytes/Sec" << endl << endl;
 			return;
 		}
 
@@ -1000,26 +1001,107 @@ void Client::handle_get(int sockFd, char *fileName, size_t fileSz) {
 	}
 	else
 	{
-		cout<<"Download Complete"<<endl;
 		fclose(fp);
 		gettimeofday(&end, NULL);
 		double downloadTime=1000 * (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1000;
 		downloadTime /= 1000;
 		cout << "Download Successful from client " << m_nodeList[i].hostName << endl;
-		cout << "Rx End: Size=" << fileSz << " Bytes Time="  << downloadTime << " Seconds Rx Rate=" << fileSz/downloadTime << " Bytes/Sec" << endl;
+		cout << fixed << "Rx End: Size=" << fileSz << " Bytes, Time="  << downloadTime << " Seconds, Rx Rate=" << fileSz/downloadTime << " Bytes/Sec" << endl;
 	}
 }
 
 void Client::start_sync() {
-	// loop through all active connections and send SYNC START message
-	for(int i=0; i<10; i++) {
-		if(m_nodeList[i].state == ACTIVE) {
-			char buffer[32];
-			int len;
-			sprintf(buffer, "SYNC START");
-			sendall(m_nodeList[i].sockFd, buffer, &len);
-		}
+	char buffer[BYTES512]={0};
+	struct timeval  begin, end;
+	size_t bytesRead = 0,bytesSent=0;
+	size_t fileSz, remBytes;
+
+	char filename[50], hostName[100];
+	getHostName(m_ipAddress, hostName);
+	sprintf(filename, "%s.txt", strtok(hostName, "."));
+
+	cout << "SYNC fileName: " << filename;
+
+	// check if the file exists, if so get file size
+	struct stat statbuf;
+	if(stat(filename, &statbuf) == -1) {
+		perror("PUT Error: stat");
+
+		return;
 	}
+	fileSz = statbuf.st_size;
+	remBytes = fileSz;
+
+	// open the file for reading
+	FILE *fp = fopen(filename, "rb");
+	if(fp == NULL) {
+		cout << "PUT Error: Failed to open file!" << endl;
+		return;
+	}
+
+	// send message to all the connected peers informing of uploading file along with its size
+	// message format PUT <FILENAME> <SIZE>
+	sprintf(buffer, "PUT %s %lu", filename, fileSz);
+	cout << "sending msg " << buffer << endl;
+	int nRead=sizeof(buffer);
+	for(int i=1; i<10; i++) {
+		if(m_nodeList[i].state == ACTIVE)
+			sendall(m_nodeList[i].sockFd, buffer, &nRead);
+	}
+	memset(buffer, 0, sizeof(buffer));
+
+	// record the time when upload is starting
+	gettimeofday(&begin, NULL);
+
+	//cout << "Uploading file " << filename  << "to client!" << m_nodeList[i].hostName << endl;
+	while(remBytes > 0)
+	{
+		for(int i=1; i<10; i++) {
+			if(m_nodeList[i].state == ACTIVE) {
+					int len;
+				if (remBytes >= BYTES512 )
+				{
+					bytesRead = fread(buffer, 1, BYTES512 , fp);
+					len=bytesRead;
+				}
+				else if (remBytes<BYTES512)
+				{
+					bytesRead = fread(buffer, 1, BYTES512-remBytes , fp);
+					len=bytesRead;
+				}
+				//cout << "sending bytes: " << bytesRead << endl;
+
+				if( sendall(m_nodeList[i].sockFd, buffer, &len) < 0)
+				{
+					cout<<"PUT Error: Failed to upload file!"<<endl;
+					remBytes=0;
+					break;
+				}
+			//cout << "remaning bytes: " << remBytes << endl;
+			}
+		}
+		remBytes=remBytes-bytesRead;
+		memset(buffer, '0', sizeof(buffer));
+	}
+
+	// either there was an EOF or some error
+	if (remBytes == 0)
+	{
+		if (ferror(fp))
+			cout << "Put Error: error reading. Failed to Upload !\n" << endl;
+		else {
+			fclose(fp);
+			//calculate the time taken for upload
+			gettimeofday(&end, NULL);
+			double uploadTime=1000 * (end.tv_sec - begin.tv_sec) + (end.tv_usec - begin.tv_usec) / 1000;
+			uploadTime /= 1000;
+			cout << "SYNC Completed" << endl;
+			//cout << "Tx End: Size=" << fileSz << " Bytes Time="  << uploadTime << " Seconds Tx Rate=" << fileSz/uploadTime << " Bytes/Sec" << endl;
+			return;
+		}
+
+	}
+	return;
 }
 
 void Client::handle_terminate(int Ix) {

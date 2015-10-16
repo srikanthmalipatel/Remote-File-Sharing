@@ -38,6 +38,7 @@ private:
     int m_nIdTracker;		// keep the track of current running id
     bool m_bInSync;			// used to check if the client is already in sync
     char m_ipAddress[32];	// host ipaddress in numbers and dot format.
+    char m_hostName[100];
     char m_srvIpAddress[32]; // this would no longer be required becz nodeList[0] contains server details.
     char m_srvList[1024];	// this holds the updates sent by server when ever there is a new client has registered/terminated/exited.
     bool m_nUnderSync;
