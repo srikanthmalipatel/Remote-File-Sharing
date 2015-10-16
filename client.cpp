@@ -92,9 +92,9 @@ void Client::eventHandler() {
 						// Received UPDATE message from server contaning list of
                 		char *pos;
                 		if((pos = strstr(recvBuff, "UPDATE")) != NULL) {
-                			printf("Got Updated Server List \n");
+                			printf("SERVER UPDATES \n");
                 			strcpy(m_srvList,pos);
-							displayServerList();
+                			displayUpdateList();
 							cout << endl;
                 		}
                 		// Received SYNC message from server
@@ -328,6 +328,7 @@ void Client::command_help() {
     printf("\tLIST - Displays a list of clients registered on this server\n");
     printf("\tREGISTER <server IP> <Port> - Registers with the server\n");
     printf("\tTERMINATE <ID> - Terminates the connection with peer associated with the ID \n");
+    printf("\tQUIT - Terminates all connections, unregisters with the server and exits the program \n");
     printf("\tCONNECT <IP/Hostname> <Port> - Connects to a client already registered with the server. *Note: Maximum connections: 3\n");
     printf("\tPUT <CONNECTION ID> <FILE NAME> - Uploads the file to the specified peer\n");
     printf("\tGET <CONNECTION ID> <FILE NAME> - Downloads the file to the specified peer\n");
@@ -627,18 +628,21 @@ void Client::command_quit() {
 		}
 	}
 	// send message to server to unregister
-	memset(buff, 0, sizeof buff);
-	sprintf(buff, "QUIT");
-	size = sizeof(buff);
-	if(sendall(m_nodeList[0].sockFd, buff, &size) != 0) {
-		cout << "Total Bytes Sent " << size;
-		cout << "QUIT Error: send failed" << endl;
-		return;
+	if(m_bisRegistered) {
+		memset(buff, 0, sizeof buff);
+		sprintf(buff, "QUIT");
+		size = sizeof(buff);
+		if(sendall(m_nodeList[0].sockFd, buff, &size) != 0) {
+			cout << "Total Bytes Sent " << size;
+			cout << "QUIT Error: send failed" << endl;
+			return;
+		}
+		m_bisRegistered = false;
+		m_nodeList[0].state = INACTIVE;
+		close(m_nodeList[0].sockFd);
+		FD_CLR(m_nodeList[0].sockFd, &m_masterSet);
 	}
-	m_bisRegistered = false;
-	m_nodeList[0].state = INACTIVE;
-	close(m_nodeList[0].sockFd);
-	FD_CLR(m_nodeList[0].sockFd, &m_masterSet);
+	exit(EXIT_SUCCESS);
 }
 
 /*
@@ -852,21 +856,15 @@ void Client::newConnectionHandler() {
 
 // ****UPDATE REQUIRED****
 // Change this function
-void Client::displayServerList() {
-	for(int i=7;i<strlen(m_srvList);i++)
-	{
+void Client::displayUpdateList() {
+	int len = strlen(m_srvList);
+	for(int i=7;i<len;i++) {
 		if(m_srvList[i]==' ')
-		{
-			cout<<"         ";
-		}
+			printf("\t\t");
 		else if(m_srvList[i]=='|')
-		{
-			cout<<endl;
-		}
+			printf("\n");
 		else
-		{
-			cout<<m_srvList[i];
-		}
+			printf("%c", m_srvList[i]);
 	}
 }
 
@@ -920,21 +918,24 @@ void Client::handle_put(int sockFd, char *filename, bool sendMsg) {
 			len=bytesRead;
 		}
 		cout << "sending bytes: " << bytesRead << endl;
-		int res=sendall(sockFd, buffer, &len);
-		if( res < 0)
+
+		if( sendall(sockFd, buffer, &len) < 0)
 		{
 			cout<<"PUT Error: Failed to upload file!"<<endl;
 			remBytes=0;
 			break;
 		}
 		remBytes=remBytes-bytesRead;
+		cout << "remaning bytes: " << remBytes << endl;
 		memset(buffer, '0', sizeof(buffer));
 	}
 
 	// either there was an EOF or some error
 	if (remBytes == 0)
 	{
-		if (feof(fp)) {
+		if (ferror(fp))
+			cout << "Put Error: error reading. Failed to Upload !\n" << endl;
+		else {
 			fclose(fp);
 			//calculate the time taken for upload
 			gettimeofday(&end, NULL);
@@ -942,8 +943,7 @@ void Client::handle_put(int sockFd, char *filename, bool sendMsg) {
 			cout << "Transfer Successful " << uploadTime << " milliseconds" << endl;
 			return;
 		}
-		if (ferror(fp))
-			cout << "Put Error: error reading. Failed to Upload !\n" << endl;
+
 	}
 	return;
 }
@@ -1123,72 +1123,12 @@ void Client::updateIpAddress() {
         if(ifAddr->ifa_addr->sa_family == AF_INET) {
             // get the ip address of this interface and update if it is not a local or private ip address
             getnameinfo(ifAddr->ifa_addr, sizeof(struct sockaddr_in), host, 32, NULL, 0, NI_NUMERICHOST);
-            if(strcmp(host,"127.0.0.1") != 0)
+            if(strcmp(host,"127.0.0.1") != 0 && strstr(host, "192.168") == NULL)
                 strcpy(m_ipAddress, host);
         }
         ifAddr = ifAddr->ifa_next;
     }
     return;
-	/*
-	// get my hostname
-	char hostname[256];
-	if (gethostname(hostname, sizeof(hostname)) < 0) {
-	    perror("gethostname");
-	    return;
-	}
-
-	// Google's DNS server IP
-	char* target_name = "8.8.8.8";
-	// DNS port
-	char* target_port = "53";
-
-	// get peer server
-	struct addrinfo hints;
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_INET;
-	hints.ai_socktype = SOCK_STREAM;
-
-	struct addrinfo* info;
-	int ret = 0;
-	if ((ret = getaddrinfo(target_name, target_port, &hints, &info)) != 0) {
-	    printf("[ERROR]: getaddrinfo error: %s\n", gai_strerror(ret));
-	    return;
-	}
-
-	if (info->ai_family == AF_INET6) {
-	    printf("[ERROR]: do not support IPv6 yet.\n");
-	    return;
-	}
-
-	// create socket
-	int sock = socket(info->ai_family, info->ai_socktype, info->ai_protocol);
-	if (sock <= 0) {
-	    perror("socket");
-	    return;
-	}
-
-	// connect to server
-	if (connect(sock, info->ai_addr, info->ai_addrlen) < 0) {
-	    perror("connect");
-	    close(sock);
-	    return;
-	}
-
-	// get local socket info
-	struct sockaddr_in local_addr;
-	socklen_t addr_len = sizeof(local_addr);
-	if (getsockname(sock, (struct sockaddr*)&local_addr, &addr_len) < 0) {
-	    perror("getsockname");
-	    close(sock);
-	    return;
-	}
-
-	// get peer ip addr
-	if (inet_ntop(local_addr.sin_family, &(local_addr.sin_addr), m_ipAddress, sizeof(m_ipAddress)) == NULL) {
-	    perror("inet_ntop");
-	    return;
-	}
-	*/
 }
 
 void Client::displayUsage() {

@@ -80,7 +80,7 @@ private:
 
 	void startListenClient();
 	void newConnectionHandler();
-	void displayServerList();
+	void displayUpdateList();
 	void handle_put(int sockFd, char *fileName, bool sendMsg=true);
 	void handle_get(int sockFd, char *fileName, size_t fileSz);
 	void handle_terminate(int Ix);
