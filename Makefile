@@ -4,13 +4,13 @@
 #
 
 
-all: napster
+all: proj1
 
-napster: driver.o server.o client.o base.o
-	g++ -g driver.o server.o client.o base.o -o napster
+proj1: smalipat_proj1.o server.o client.o base.o
+	g++ -g smalipat_proj1.o server.o client.o base.o -o proj1
 
-driver.o: driver.cpp
-	g++ -g -c driver.cpp
+smalipat_proj1.o: smalipat_proj1.cpp
+	g++ -g -c smalipat_proj1.cpp
 
 server.o: server.cpp
 	g++ -g -c server.cpp
@@ -22,7 +22,7 @@ base.o: base.cpp
 	g++ -g -c base.cpp
 
 clean:
-	rm *.o napster
+	rm *.o proj1
 
 # vim:ft=make
 #

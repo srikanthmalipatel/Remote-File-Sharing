@@ -35,6 +35,8 @@ private:
     // server details
     int m_nListenPort;
     char m_ipAddress[32];
+    int m_syncQue[10];
+    int m_nQueIx;
 
     // socket specific members
     int m_nListenSd;        // listen socket descriptor

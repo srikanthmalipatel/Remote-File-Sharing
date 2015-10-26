@@ -85,6 +85,7 @@ private:
 	void handle_put(int sockFd, char *fileName, bool sendMsg=true);
 	void handle_get(int sockFd, char *fileName, size_t fileSz);
 	void handle_terminate(int Ix);
+	void handle_sync();
 	void start_sync();
 	void reorderNodeList(int Ix);
 

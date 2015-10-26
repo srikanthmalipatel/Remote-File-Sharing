@@ -21,6 +21,7 @@ Server::Server(int port) {
 	cout << "Running program as server" << endl;
     this->m_nListenPort = port;
     this->m_nLatestIndex = 0;
+    this->m_nQueIx = 0;
 
     // initalize nodeList and its tracker
 	for(int i=0; i<10; i++)
@@ -89,8 +90,9 @@ void Server::eventHandler() {
                 	int bytesRead;
                 	if( (bytesRead = recv(i, recvBuff, sizeof(recvBuff), 0)) > 0) {
                 		recvBuff[strlen(recvBuff)] = 0;
-                		if(strstr(recvBuff, "SYNC")) {
-                			cout << "Received Message: " << recvBuff << "from client" << endl;
+                		if(strcmp(recvBuff, "SYNC") == 0) {
+                			cout << "Received Message: " << recvBuff << " from client" << endl;
+                			m_nQueIx = 0;
                 			// update this message to all connected clients
                 			for(int i=0; i<10; i++) {
                 				if(m_nodeList[i].state == ACTIVE) {
@@ -99,7 +101,7 @@ void Server::eventHandler() {
                 			}
                 		}
                 		if(strcmp(recvBuff, "QUIT") == 0) {
-                			cout << "Received Message: " << recvBuff << "from client" << endl;
+                			cout << "Received Message: " << recvBuff << " from client" << endl;
                 			for(int j=0; j<10; j++) {
                 				if(m_nodeList[j].sockFd == i) {
                 					handle_terminate(j);
@@ -107,6 +109,65 @@ void Server::eventHandler() {
                 			}
                 			updateNodesinList();
                 		}
+                		if(strcmp(recvBuff, "SYNC WRITE") == 0) {
+                			/*cout << "Received Message: " << recvBuff << " from client ";
+                			int p;
+                			for(p=0; p<10; p++) {
+                				if(m_nodeList[p].state == ACTIVE && m_nodeList[p].sockFd == i)
+                					cout << m_nodeList[p].hostName << endl;
+                			}*/
+                			// add this socket to sync que
+                			m_syncQue[m_nQueIx] = i;
+                			m_nQueIx++;
+                			// if message has been recieved from all registered clients then start writing
+                			if(m_nQueIx == m_nLatestIndex) {
+                				// send Sync OK message to first client in Queue
+                				char buff[1024] = {0};
+                				sprintf(buff,"SYNC OK");
+                				int len = sizeof buff;
+                				sendall(m_syncQue[0], buff, &len);
+                				// send SYNC READ message to rest of the clients
+                				memset(buff, 0, sizeof buff);
+                				sprintf(buff, "SYNC READ %s", m_nodeList[0].hostName);
+                				for(int j=1; j<m_nQueIx; j++) {
+                					len = sizeof buff;
+                					sendall(m_syncQue[j], buff, &len);
+                				}
+                			}
+                		}
+                		if(strcmp(recvBuff, "SYNC FIN") == 0) {
+                			/*cout << "Received Message: " << recvBuff << " from client ";
+                			int p;
+							for(p=0; p<10; p++) {
+								if(m_nodeList[p].state == ACTIVE && m_nodeList[p].sockFd == i)
+									cout << m_nodeList[p].listenPort << endl;
+							}*/
+                			// get the index of client which sent fin
+							int j;
+							for(j=0; j<m_nQueIx; j++)
+								if(i == m_syncQue[j]) break;
+
+							if(j == m_nQueIx-1) {
+								m_nQueIx = 0;
+							}
+							else {
+								// send SYNC OK message to the next client in the queue
+								char buff[1024] = {0};
+								sprintf(buff,"SYNC OK");
+								int len = sizeof buff;
+								sendall(m_syncQue[j+1], buff, &len);
+								// send SYNC READ message to rest of the clients
+								memset(buff, 0, sizeof buff);
+								sprintf(buff, "SYNC READ %s", m_nodeList[j+1].hostName);
+								for(int k=0; k<m_nQueIx; k++) {
+									if(k != j+1) {
+										len = sizeof buff;
+										sendall(m_syncQue[k], buff, &len);
+									}
+								}
+							}
+                		}
+                		cout << endl;
                 	}
                 	// if bytesRead=0 then terminate connection
                 	else {
@@ -283,7 +344,8 @@ void Server::newConnectionHandler() {
 				m_nodeList[i].sockFd = newConnSd;
 				strcpy(m_nodeList[i].ip_addr,remoteIP);
 				getHostName(m_nodeList[i].ip_addr, m_nodeList[i].hostName);
-				m_nLatestIndex = i;
+				m_nodeList[i].id = m_nLatestIndex+1;
+				m_nLatestIndex += 1;
 				break;
 			}
 		}
@@ -393,27 +455,6 @@ void Server::updateIpAddress() {
     //printf("ip: %s", m_ipAddress);
     return;
 }
-
-/*void Server::addNodetoList(int sockfd, char *ipAddr, int port) {
-	m_cList[m_nClientCount].id = m_nClientCount+1;
-	m_cList[m_nClientCount].sockFd = sockfd;
-	m_cList[m_nClientCount].port = port;
-	strcpy(m_cList[m_nClientCount].ipAddress, ipAddr);
-
-	struct in_addr ipv4addr;
-	if(!inet_aton(ipAddr, &ipv4addr)) {
-		perror("inet_aton");
-		exit(EXIT_FAILURE);
-	}
-	struct hostent *host;
-	if((host = gethostbyaddr((const void*)&ipv4addr, sizeof ipv4addr, AF_INET)) == NULL) {
-		perror("gethostbyaddr");
-		exit(EXIT_FAILURE);
-	}
-	strcpy(m_cList[m_nClientCount].hostName, host->h_name);
-	printf("Connection Successful from %s[%s] on port %d\n", m_cList[m_nClientCount].hostName, m_cList[m_nClientCount].ipAddress, m_cList[m_nClientCount].port);
-	m_nClientCount++;
-}*/
 
 void Server::updateNodesinList() {
 	cout<<m_nodeList[m_nLatestIndex].ip_addr<<":"<<m_nodeList[m_nLatestIndex].listenPort<<" Registered Successfully. " << endl;
